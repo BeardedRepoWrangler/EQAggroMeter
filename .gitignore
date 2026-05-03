@@ -1,0 +1,51 @@
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editors / IDEs ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Obsidian (keep config, drop volatile state) ---
+.obsidian/workspace*
+.obsidian/cache
+.obsidian/appearance.json
+.trash/
+
+# --- Python (in case) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node (in case) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Logs / temp ---
+*.log
+tmp/
+temp/
+
+# --- Secrets ---
+*.pem
+*.key
+secrets.*
