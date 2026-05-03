@@ -49,22 +49,24 @@ function M.tagMembers(members, roles)
     local mtName = roles.mtName
     local maName = roles.maName
 
-    local explicitMT = false
+    local explicitMT, explicitMA = false, false
     for _, m in ipairs(members) do
         m.isMT = (mtName and m.name == mtName) or false
         m.isMA = (maName and m.name == maName) or false
         if m.isMT then explicitMT = true end
+        if m.isMA then explicitMA = true end
     end
 
-    if not explicitMT then
-        -- Group case: exactly one tank-class member → flag them as MT.
-        -- Multiple tank-class members → ambiguous, leave for user override
-        -- in step 7 phase 2.
-        --
-        -- Solo case is handled separately by tagSoloMT (called after pets
-        -- are appended), because the implicit tank in solo may be the
-        -- user's pet (necro/mage/etc.) and pets aren't in `members` yet
-        -- at this point in buildRoster.
+    -- MT heuristic: only auto-tag if there's NO explicit MT AND NO explicit
+    -- MA. If anyone is explicitly designated MA, the user is being
+    -- deliberate about role assignment, and second-guessing by promoting a
+    -- tank-class member to MT can dual-tag them (isMT + isMA both true),
+    -- which then conflicts with the visibility filters.
+    --
+    -- Solo case is handled separately by tagSoloMT (called after pets are
+    -- appended), because the implicit tank in solo may be the user's pet
+    -- (necro/mage/etc.) and pets aren't in `members` yet at this point.
+    if not explicitMT and not explicitMA then
         if #members > 1 then
             local tankCount, tankIdx = 0, nil
             for i, m in ipairs(members) do
