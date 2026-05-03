@@ -220,14 +220,15 @@ end
 
 function M.publish()
     if not config.get('share.enabled') then return end
-    if not _activeChannel then return end
     local nowM = nowMs()
     local interval = config.get('share.publishMs') or 2000
     if (nowM - _lastPublishMs) < interval then return end
 
     local payload = buildPublishPayloadFromMe()
     if payload then
-        sendToChannel(_activeChannel, payload)
+        -- Channel arg is ignored in the group-chat transport — sendToChannel
+        -- routes via /g or /rs based on current group/raid state.
+        sendToChannel(nil, payload)
     end
     _lastPublishMs = nowM
 end
