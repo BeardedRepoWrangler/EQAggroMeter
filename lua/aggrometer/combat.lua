@@ -306,36 +306,69 @@ local function onMiss(line, attackerName)
     dispatch(line, attackerName, 'miss')
 end
 
--- Hit on anyone-not-me. Pattern: "<attacker> <target> for <n> point(s) of
--- damage."  Matches every melee damage line in the zone, but we only act
--- when the target is NOT "YOU" — that case is handled by onHit above and
--- already credits us correctly. For non-YOU targets, the line proves the
--- mob is currently attacking someone else (your pet, a peer, a peer's
--- pet), so any local entry we hold for that mob is stale by definition
--- and we evict on the spot.
+-- Hit on anyone. Pattern: "<phrase> for <n> point(s) of damage."
+-- Captures the WHOLE attacker-verb-target phrase as a single #1# because
+-- mq.event needs literal text between captures to disambiguate them, and
+-- whitespace alone (the obvious "<attacker> <verb> <target>" shape) is
+-- not enough — verbs and target/mob names are both variable-length and
+-- multi-word, so the parser can't tell where one capture ends and the
+-- next begins. Single capture, parse in Lua.
+--
+-- The phrase looks like one of:
+--   "<mob> <verb> <target>"            e.g. "a pyre golem hits Vtik"
+--   "<mob>'s <part> <verb> <target>"   e.g. "a sepulcher skeleton's claw hits Vtik"
+--   "<player|pet> <verb> <mob>"        e.g. "Vtik hits a pyre golem"
+--
+-- We're interested in the first two shapes (mob attacking someone else).
+-- Detection: see if the phrase STARTS WITH any xtarget mob name (or
+-- "<mob>'s "). If so, the line is a hit by that mob; everything after
+-- the mob name is verb+target. We only evict when the target is NOT
+-- "YOU" — hits on YOU are already handled by onHit above and keep our
+-- own entry fresh.
 --
 -- Why this matters: without this signal, our local _localAttackers entry
 -- only ages out via the local TTL (default 5s). When a pet peels a mob
--- off us, EQ stops sending us hit events but the existing entry sticks
--- around for the full TTL — both our own meter AND any peer's meter (via
--- the AGMH wire protocol) show stale "I'm holding" attribution for the
--- TTL duration before correcting. Eviction-on-other-hit cuts that window
--- from 5s down to ~1 mob swing rate (typically 2s).
-local function onOtherHit(line, attackerAndVerb, target, _damage)
-    if not target or target == 'YOU' then return end
-    -- Resolve via the same multi-candidate normalization onHit/onMiss
-    -- use, so verb / possessive / miss-form-style #1# captures all work.
-    local mobIds = resolveAttacker(attackerAndVerb)
+-- off us, EQ stops sending us hit events but the entry sticks around for
+-- the full TTL — both our own meter AND any peer's meter (via the AGMH
+-- wire protocol) show stale "I'm holding" attribution. Eviction-on-
+-- other-hit cuts that window from 5s down to ~1 mob swing (~2s typical).
+local function onOtherHit(line, phrase, _damage)
+    if not phrase or phrase == '' then return end
+    -- Hits on YOU end the phrase with " YOU" — those are handled by
+    -- onHit and must NOT evict our own entry.
+    if phrase:sub(-4) == ' YOU' or phrase:find(' YOU ', 1, true) then
+        return
+    end
+
+    local lower = phrase:lower()
+
+    -- Check if the phrase starts with any xtarget mob name (plain or
+    -- possessive). _xtargetIndex keys are already normalized lowercase.
+    local hitMobIds
+    for name, ids in pairs(_xtargetIndex) do
+        if lower:sub(1, #name) == name then
+            -- Plain prefix: "<mob> <verb> ..." — confirm the next char is
+            -- a space or "'", otherwise we false-match a longer-named mob
+            -- (e.g., "a sepulcher skeleton" vs "a sepulcher skeleton lord").
+            local nextCh = lower:sub(#name + 1, #name + 1)
+            if nextCh == ' ' or nextCh == "'" then
+                hitMobIds = ids
+                break
+            end
+        end
+    end
+
+    if not hitMobIds then return end
+
     local evicted = false
-    for _, mobId in ipairs(mobIds) do
+    for _, mobId in ipairs(hitMobIds) do
         if _localAttackers[mobId] then
             _localAttackers[mobId] = nil
             evicted = true
         end
     end
     if evicted and _eventTap then
-        writeTapLine('evict', string.format('%s -> %s', attackerAndVerb, target),
-            mobIds)
+        writeTapLine('evict', phrase, hitMobIds)
     end
 end
 
@@ -522,13 +555,14 @@ function M.init(charName)
         -- (hit, bite, slash, smash...); we capture <verb> as #2# and
         -- discard it — only the attacker (#1#) matters for attribution.
         mq.event('agm_combat_miss',   '#1# tries to #2# YOU#*#',           onMiss)
-        -- Damage hits on anyone-not-me — used to evict stale entries fast
-        -- when a pet peels a mob off us. Pattern is more general than the
-        -- onHit patterns; both fire on hits to me but onOtherHit short-
-        -- circuits when target=="YOU". onOtherHit alone fires for hits on
-        -- everyone else (own pet, peers, peer pets, group NPCs).
-        mq.event('agm_combat_other_pl', '#1# #2# for #3# points of damage.', onOtherHit)
-        mq.event('agm_combat_other_sg', '#1# #2# for #3# point of damage.',  onOtherHit)
+        -- Damage hits on anyone — used to evict stale local entries fast
+        -- when a pet peels a mob off us. Single-capture pattern because
+        -- mq.event needs literal anchors between captures and whitespace
+        -- between #1# and #2# isn't enough (both can be multi-word).
+        -- onOtherHit parses the captured phrase to determine whether the
+        -- attacker is a tracked mob and the target is not me.
+        mq.event('agm_combat_other_pl', '#1# for #2# points of damage.', onOtherHit)
+        mq.event('agm_combat_other_sg', '#1# for #2# point of damage.',  onOtherHit)
     end)
     _initialized = true
 end

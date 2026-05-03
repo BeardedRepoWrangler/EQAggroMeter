@@ -103,7 +103,7 @@ The previous "Priority 2: mob == Me.Pet.Target.ID → pet" rule was removed in A
 
 - `<attacker> YOU for <n> point(s) of damage.` (hits on me — feeds `_localAttackers`)
 - `<attacker> tries to <verb> YOU<rest>` (misses + defensive results on me — feeds `_localAttackers`)
-- `<attacker> <target> for <n> point(s) of damage.` (hits on anyone — when `<target>` is NOT "YOU", evicts the attacker's `_localAttackers` entry, because the mob is now hitting someone else and our claim is stale by definition)
+- `<phrase> for <n> point(s) of damage.` (hits on anyone — single-capture pattern because mq.event can't disambiguate `#1# #2# for ...` when both #1# and #2# can be multi-word names. The handler parses the captured phrase: if it starts with an xtarget mob name AND the phrase doesn't end with " YOU" / contain " YOU ", the mob is hitting someone else and we evict the attacker's `_localAttackers` entry — our claim is stale by definition.)
 
 The third pattern is critical for fast peel detection. When your pet (or a peer / peer's pet) takes the mob off you, EQ stops logging hits-on-you, but a `_localAttackers` entry sticks around for the full local TTL (default 5s) and during that window both your own meter AND every peer's meter via the AGMH wire protocol show stale "I'm holding" attribution. The eviction pattern collapses that window from 5s to ~1 mob swing (~2s typical) by reacting to the first hit on the new target.
 
