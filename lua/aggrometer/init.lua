@@ -146,6 +146,24 @@ local function commandHandler(...)
         local r = data.roster()
         chatf('mode = %s   members = %d   target = %s',
             r.mode, #r.members, tostring(r.targetName))
+        chatf('holder=%s  secondary=%s @ %d%%',
+            tostring(r.holderName), tostring(r.secondaryName), r.secondaryPctAggro or 0)
+        for i, m in ipairs(r.members) do
+            local xtCount = (m.xtargets and #m.xtargets) or 0
+            chatf('  [%d] %-16s cls=%-3s spawn=%s  isMe=%s isMT=%s isMA=%s isPet=%s  pct=%d  xt=%d',
+                i, tostring(m.name), tostring(m.class), tostring(m.spawnId),
+                tostring(m.isMe), tostring(m.isMT), tostring(m.isMA),
+                tostring(m.isPet), m.pctAggro or 0, xtCount)
+        end
+        local function safeTLO(fn)
+            local ok, v = pcall(fn)
+            if ok and v ~= nil then return v end
+            return nil
+        end
+        local mtName = safeTLO(function() return mq.TLO.Group.MainTank.Name() end)
+        local maName = safeTLO(function() return mq.TLO.Group.MainAssist.Name() end)
+        chatf('Group.MainTank.Name = %s   Group.MainAssist.Name = %s',
+            tostring(mtName), tostring(maName))
     elseif sub == 'share' then
         local arg = (args[2] or 'status'):lower()
         if arg == 'on' or arg == 'start' then

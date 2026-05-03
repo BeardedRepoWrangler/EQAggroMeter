@@ -295,21 +295,18 @@ local function buildXTargetsByHolder(target, members, remoteData)
             displayPct = displayPct or 0
         end
 
-        -- Skip "boring" sub-bars: holder is self, no non-holder threat,
-        -- not the current target. These are mobs you hold quietly.
-        local isBoring = (holderId == mySpawnId) and
-                         (maxNonHolderPct < 0 or maxNonHolderPct == 0) and
-                         (mobId ~= currentTargetId)
-        if not isBoring then
-            byHolder[holderId] = byHolder[holderId] or {}
-            table.insert(byHolder[holderId], {
-                mobId      = mobId,
-                mobName    = info.name,
-                pctAggro   = displayPct,
-                isCurrent  = (mobId == currentTargetId),
-                threatChar = maxNonHolderChar,
-            })
-        end
+        -- Always show — tanks need visibility into mobs they hold so they
+        -- know nothing has slipped, and DPS/MAs need to see what they have
+        -- aggro on. The earlier "boring" filter (skip self-held mobs with
+        -- no other threats) hid information from the tank perspective.
+        byHolder[holderId] = byHolder[holderId] or {}
+        table.insert(byHolder[holderId], {
+            mobId      = mobId,
+            mobName    = info.name,
+            pctAggro   = displayPct,
+            isCurrent  = (mobId == currentTargetId),
+            threatChar = maxNonHolderChar,
+        })
     end
 
     return byHolder
