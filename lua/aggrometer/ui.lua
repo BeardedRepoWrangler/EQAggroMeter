@@ -339,10 +339,15 @@ local function colorForMob(holderMember)
 end
 
 -- Extract x from CalcTextSize result regardless of binding return form.
+-- MQ Lua's ImGui.CalcTextSize might return:
+--   * an ImVec2 with .x/.y properties (newer bindings)
+--   * a 2-element table { [1]=x, [2]=y } (some bindings)
+--   * two values (width, height) — caught by single-var assignment as just width
 local function textWidth(s)
     if not s or s == '' then return 0 end
-    local sz = ImGui.CalcTextSize(s)
-    if type(sz) == 'table' then return sz.x or sz[1] or 0 end
+    local v = ImGui.CalcTextSize(s)
+    if type(v) == 'table' then return v.x or v[1] or 0 end
+    if type(v) == 'number' then return v end
     return 0
 end
 
