@@ -245,16 +245,17 @@ local function buildXTargetsByHolder(target, members, remoteData)
 
     -- Attribute each mob and build byHolder.
     --
-    -- Priority order (see ADRs 0004 and 0005):
-    --   -1. combat.recentAttackerOf(mob) → me. A mob currently melee'ing
-    --      me is by definition treating me as #1 threat — definitional
-    --      holder evidence. This signal comes from real-time chat events,
-    --      not TLO refresh, so it leads everything below.
+    -- Priority order (see ADRs 0004, 0005, 0006):
+    --   -1. combat.recentAttackerCharOf(mob) → that character. A mob
+    --      currently melee'ing a character (self OR a peer broadcasting
+    --      AGMH) is by definition treating that character as #1 threat —
+    --      definitional holder evidence. Real-time chat events; no TLO
+    --      refresh in the path; leads everything below.
     --    0. info.pcts[me] >= 100 on this mob → me. Local XTarget pct ==
     --      100 says "I'm the holder" by ratio definition. Lags by one
     --      MQ refresh cycle compared to combat events but works when
-    --      combat events haven't fired yet (initial pull, or mob is
-    --      between swings).
+    --      combat events haven't fired yet (initial pull, mob between
+    --      swings, AGMH still in flight).
     --    1. Target.AggroHolder for the current target. Reliable for the
     --      current target only — no AggroHolder data for non-current
     --      xtarget mobs.
@@ -268,9 +269,20 @@ local function buildXTargetsByHolder(target, members, remoteData)
     for mobId, info in pairs(mobInfo) do
         local holderId
 
-        if combat.recentAttackerOf(mobId) then
-            -- Priority -1: this mob is hitting me right now → I hold it.
-            holderId = mySpawnId
+        local attackerChar = combat.recentAttackerCharOf(mobId)
+        local attackerSpawnId
+        if attackerChar then
+            if attackerChar == myCharName then
+                attackerSpawnId = mySpawnId
+            else
+                attackerSpawnId = nameToSpawn[attackerChar]
+            end
+        end
+
+        if attackerSpawnId and attackerSpawnId > 0 then
+            -- Priority -1: this mob is hitting attackerChar right now
+            -- → they hold it. Works for self AND for peers via AGMH.
+            holderId = attackerSpawnId
         elseif (info.pcts[myCharName] or 0) >= 100 then
             -- Priority 0: I'm at 100% = I am the holder.
             holderId = mySpawnId

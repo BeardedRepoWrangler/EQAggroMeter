@@ -198,10 +198,20 @@ local function commandHandler(...)
         local arg = (args[2] or 'status'):lower()
         if arg == 'status' then
             local snap = combat.snapshot()
-            local count = 0
-            for _ in pairs(snap) do count = count + 1 end
-            chatf('combat detection: ttl=%.1fs  tap=%s  recent attackers=%d',
-                combat.ttl(), tostring(combat.tap()), count)
+            local me = combat.myCharName()
+            local localCount, peerCount, peerEntries = 0, 0, 0
+            for char, mobs in pairs(snap) do
+                if char == me then
+                    for _ in pairs(mobs) do localCount = localCount + 1 end
+                else
+                    peerCount = peerCount + 1
+                    for _ in pairs(mobs) do peerEntries = peerEntries + 1 end
+                end
+            end
+            chatf('combat detection: ttl=%.1fs  remote-ttl=%.1fs  tap=%s',
+                combat.ttl(), combat.remoteTtl(), tostring(combat.tap()))
+            chatf('  local recent attackers: %d   peers heard: %d (%d entries)',
+                localCount, peerCount, peerEntries)
             if combat.tap() and combat.logPath() then
                 -- Backslashes in paths break /echo (interpreted as MQ escape
                 -- codes). Forward-slashes display cleanly and Windows file
@@ -209,9 +219,12 @@ local function commandHandler(...)
                 local p = (combat.logPath() or ''):gsub('\\', '/')
                 chatf('  tap log: %s  (%d events written)', p, combat.logCount())
             end
-            for mobId, age in pairs(snap) do
-                local name = mq.TLO.Spawn(mobId).CleanName() or '?'
-                chatf('  mob %d (%s): %.1fs ago', mobId, tostring(name), age)
+            for char, mobs in pairs(snap) do
+                local label = (char == me) and 'local' or ('peer ' .. char)
+                for mobId, age in pairs(mobs) do
+                    local name = mq.TLO.Spawn(mobId).CleanName() or '?'
+                    chatf('  %s mob %d (%s): %.1fs ago', label, mobId, tostring(name), age)
+                end
             end
         elseif arg == 'tap' then
             local on = (args[3] or ''):lower()
@@ -270,7 +283,7 @@ config.init(serverName, charName)
 ui.applyConfig()
 data.applyConfig()
 share.init(charName)
-combat.init()
+combat.init(charName)
 
 ui.setRosterProvider(data.roster)
 

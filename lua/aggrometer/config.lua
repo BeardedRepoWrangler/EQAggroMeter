@@ -72,13 +72,22 @@ local DEFAULTS = {
         autoResetStale     = true,
         staleThresholdSec  = 3,
     },
-    -- Real-time hit detection — see decisions/0005-combat-event-detection.md.
-    -- attackerTtlSec: how long a mob stays "recently attacked me" after
-    -- the last detected hit/miss event before falling out of priority -1.
-    -- Should be longer than the gap between two consecutive swings (~3s
-    -- for typical mobs). 5s gives a comfortable margin.
+    -- Real-time hit detection — see decisions/0005-combat-event-detection.md
+    -- and decisions/0006-combat-event-broadcast.md.
+    --   attackerTtlSec       : local TTL — how long a mob stays "recently
+    --                          attacked me" on this client after the last
+    --                          detected hit/miss event. Should comfortably
+    --                          exceed the gap between two consecutive
+    --                          swings (~3s typical). 5s by default.
+    --   remoteAttackerTtlSec : how long a peer's published AGMH set stays
+    --                          authoritative on the receiver. MUST exceed
+    --                          share.keepaliveMs * 2 so a single dropped
+    --                          chat message doesn't age out the peer's
+    --                          attribution. 30s by default (vs default
+    --                          15s keepalive).
     combat = {
-        attackerTtlSec = 5.0,
+        attackerTtlSec       = 5.0,
+        remoteAttackerTtlSec = 30.0,
     },
 }
 

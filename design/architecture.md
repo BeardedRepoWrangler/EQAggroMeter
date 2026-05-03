@@ -80,12 +80,12 @@ The MQ docs literally say `???` for `Target.SecondaryPctAggro`. Probe runs on 20
 
 ## Holder attribution priority
 
-For each xtarget mob, `data.lua:buildXTargetsByHolder` decides which roster member is currently the aggro holder. See [[../decisions/0004-holder-attribution-trusts-local-100pct|ADR 0004]] and [[../decisions/0005-combat-event-detection|ADR 0005]] for rationale.
+For each xtarget mob, `data.lua:buildXTargetsByHolder` decides which roster member is currently the aggro holder. See [[../decisions/0004-holder-attribution-trusts-local-100pct|ADR 0004]], [[../decisions/0005-combat-event-detection|ADR 0005]], and [[../decisions/0006-combat-event-broadcast|ADR 0006]] for rationale.
 
 Priority order (first match wins):
 
--1. **Real-time hit signal.** If `combat.recentAttackerOf(mob)` returns true (combat events show this mob has hit or attempted to hit me within the TTL window, default 5s), attribute to me. This signal comes from `mq.event` chat hooks rather than TLOs, so it leads everything below — TLO refresh cycles can't update faster than the game tick that resolved the swing.
-0. **Local 100%.** If `info.pcts[me] >= 100` for a mob, attribute to me. `Me.XTarget(slot).PctAggro == 100` is the ground-truth holder signal in TLO-space. Lags by one MQ refresh compared to combat events but works when no combat event has fired yet (initial pull, mob between swings).
+-1. **Real-time hit signal (self or peer).** If `combat.recentAttackerCharOf(mob)` returns a character name — either self (from local `mq.event` hits) or any peer (from received `AGMH:` broadcasts) — attribute to that character via the roster name→spawn lookup. When self and a peer both claim recent attribution, most-recent timestamp wins (only one character can be the holder at a time; freshest signal is closest to ground truth). This signal comes from real-time chat events, not TLO refresh, so it leads everything below.
+0. **Local 100%.** If `info.pcts[me] >= 100` for a mob, attribute to me. `Me.XTarget(slot).PctAggro == 100` is the ground-truth holder signal in TLO-space. Lags by one MQ refresh compared to combat events but works when no combat event has fired yet (initial pull, mob between swings, AGMH still in flight).
 1. **AggroHolder for current target.** When neither (-1) nor (0) fires, `mq.TLO.Target.AggroHolder.ID` is reliable for the current target only. There is no AggroHolder TLO for non-current xtarget mobs.
 2. **Heuristic.** Pick the character with the highest known pct across local + peer XTarget data. If max pct < 100 (mob unclaimed), fall back to MT (the "expected tank"). Final fallback to self.
 
@@ -100,9 +100,16 @@ The previous "Priority 2: mob == Me.Pet.Target.ID → pet" rule was removed in A
 - `<attacker> YOU for <n> point(s) of damage.` (hits)
 - `<attacker> tries to <verb> YOU<rest>` (misses + defensive results — dodge, parry, riposte, block)
 
-The `<attacker>` prefix is reduced to a mob name by stripping the trailing verb word (or possessive limb form, e.g. `a sepulcher skeleton's claw hits` → `a sepulcher skeleton`). Resolution against the current XTarget list uses a per-fetch cached `name → mobIds` index, so each event fires O(1) on the hot path.
+The `<attacker>` capture is reduced to a mob name by trying multiple normalization candidates: as-is (handles miss form, where `#1#` is just the mob name), verb-stripped (handles hit form, where `#1#` is `<mob> <verb>`), and possessive-stripped (handles limb-attack form, where `#1#` is `<mob>'s <part> <verb>`). First candidate that lands on the current XTarget index wins. The index is a per-fetch cached `name → mobIds` map refreshed by `data.fetch`, so each event fires O(1) on the hot path.
 
 Same-display-name multi-mob disambiguation was *designed* around a `Spawn(mobId).Target.ID() == Me.ID()` tiebreaker, but the 2026-05-03 probe established that `Spawn.Target` doesn't exist on Ascendant's MQ build (errors on access). The tiebreaker therefore degrades on this server to "over-attribute all matching same-named mobs as recently-attacking" — handled gracefully by the `pcall` wrapper, no error surfaces. Over-attribution to self is still strictly better than the original under-attribution bug. If a future Ascendant MQ build adds `Spawn.Target`, the tiebreaker code path activates without changes.
+
+Local vs remote attacker state, with separate TTLs (see ADR 0006):
+
+- `_localAttackers[mobId] = ts` — refreshed per detected event. TTL `combat.attackerTtlSec` (default 5s) covers the gap between consecutive swings of one mob.
+- `_remoteAttackers[charName][mobId] = ts` — populated by `combat.ingestRemoteAttackers()` when share.lua receives an `AGMH:` line. TTL `combat.remoteAttackerTtlSec` (default 30s) MUST exceed `share.keepaliveMs * 2` so a single dropped chat message doesn't age out the peer's attribution.
+
+`combat.recentAttackerCharOf(mobId)` walks both maps, returns the character name with the freshest timestamp within its respective TTL, or nil if no signal.
 
 ## Open questions
 

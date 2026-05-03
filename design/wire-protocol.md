@@ -32,6 +32,27 @@ Example (Etcshadow, 87% on mob 1234, 30% on mob 5678):
 AGM:Etcshadow:1234@87,5678@30
 ```
 
+### `AGMH:` — recent-hit attacker set
+
+```
+AGMH:<charName>:<mobId>,<mobId>,...
+```
+
+The publisher's current set of mobs that have hit (or attempted to hit) them within the local TTL window (default 5s). See [[../decisions/0006-combat-event-broadcast|ADR 0006]]. Receiver replaces the publisher's known set on each broadcast; broadcasts are full snapshots, not deltas.
+
+| Field | Type | Notes |
+|---|---|---|
+| `<charName>` | string | Publisher's character name |
+| `<mobId>` | int | Spawn ID of a mob currently in the publisher's local attacker set |
+
+Example (Etcshadow being hit by mobs 433 and 515):
+
+```
+AGMH:Etcshadow:433,515
+```
+
+Empty publisher set → no broadcast. Receivers age out a peer's entry via `combat.remoteAttackerTtlSec` (default 30s, must exceed `keepaliveMs * 2`).
+
 ### `AGMP:` — pet aggro snapshot
 
 ```
@@ -57,23 +78,29 @@ AGMP:Xebarab:1234@100
 
 ## Publish cadence (event-driven)
 
-Replaces the original fixed-2s cadence. Publishes happen when:
+Replaces the original fixed-2s cadence. A publish cycle runs when:
 
-1. **Holder transition detected** — a mob's pct crossed the 100% threshold either way (gained or lost holder status), OR a mob was added to / removed from XTarget, OR pet's swing target changed. Rate-limited to one publish per `share.changeMinIntervalMs` (default 1000ms).
+1. **Holder transition detected** — a mob's pct crossed the 100% threshold either way (gained or lost holder status), OR a mob was added to / removed from XTarget, OR pet's swing target changed, OR the local attacker set's membership changed (mob added or removed from `combat.localAttackerSet()`). Rate-limited to one publish per `share.changeMinIntervalMs` (default 1000ms).
 2. **Keepalive** — at most every `share.keepaliveMs` (default 15000ms) since last publish, regardless of state change. Acts as a sanity refresh for any messages dropped or missed.
 
-This produces low chat noise during stable fights (one publish every 15s) while reacting fast to actual events (within ~100ms detection latency + 1s rate limit).
+When a cycle fires, share.lua sends all three message types whose payloads currently have content: `AGM:` (any xtargets), `AGMP:` (pet has a swing target), and `AGMH:` (any local recent attackers). Each type has its own emptiness check and is omitted from the cycle when empty — empty broadcasts would just be noise.
+
+This produces low chat noise during stable fights (3 lines every 15s, two of them often suppressed by emptiness) while reacting fast to actual events (within ~100ms detection latency + 1s rate limit).
 
 ## Receive logic
 
-`share.lua:dispatchAGM` parses each chat line that matches the registered patterns (group, raid, channel, /tell formats — see `M.init`) and dispatches based on prefix:
+`share.lua:dispatchAGM` parses each chat line that matches the registered patterns (group, raid, channel, /tell formats — see `M.init`) and dispatches based on prefix (longest-match-first ordering matters: `AGMH:` and `AGMP:` are checked before `AGM:`):
 
-- `AGM:` → `handleAGMData` stores `{ mobs = {...}, updated = <timestamp> }` in `_remote[charName]`
-- `AGMP:` → also `handleAGMData`, but keyed by pet name. Receiver's `data.lua` finds the pet in its local roster via `findPets` and applies the published aggro to that pet entry.
+- `AGMH:` → `handleAGMHData` parses the mob list and calls `combat.ingestRemoteAttackers(charName, mobs)`. Replaces the peer's whole set in `_remoteAttackers[charName]`. Empty mob list → entry deleted.
+- `AGMP:` → `handleAGMData`, keyed by pet name. Receiver's `data.lua` finds the pet in its local roster via `findPets` and applies the published aggro to that pet entry.
+- `AGM:` → `handleAGMData` stores `{ mobs = {...}, updated = <timestamp> }` in `_remote[charName]`.
 
-Self-echo is filtered: incoming messages where `sender == _myCharName` are dropped.
+Self-echo is filtered: incoming messages where `sender == _myCharName` are dropped at the dispatch layer. `combat.ingestRemoteAttackers` re-checks defensively.
 
-Stale entries: peer data older than `share.remoteStaleMs` (default 30s, must be > keepaliveMs × 2) is pruned each tick.
+Stale entries:
+
+- `_remote` (AGM/AGMP data): peer entries older than `share.remoteStaleMs` (default 30s, must be > keepaliveMs × 2) pruned each tick.
+- `_remoteAttackers` (AGMH data): peer entries older than `combat.remoteAttackerTtlSec` (default 30s, same rationale) pruned by `combat.gc()` called from `data.fetch`.
 
 ## How attribution uses this
 
@@ -125,7 +152,6 @@ See [[../decisions/0002-tlo-surface|ADR 0002]] for the constraints that drove th
 
 ## Future protocol additions (not implemented)
 
-- **Combat-event hit broadcast** — `AGMH:<charName>:<mobId>,<mobId>,...` listing mobs that have hit / tried to hit the publisher within the local TTL window. Receiver applies Priority -1 attribution to that peer for those mobs (same model as `combat.lua` does locally — see [[../decisions/0005-combat-event-detection|ADR 0005]]). Publish cadence: event-driven on first new attacker, rate-limited; plus keepalive. Will get its own ADR when implemented.
-- **Explicit holder events** — `AGM-GOT:<char>:<mobId>` / `AGM-LOST:<char>:<mobId>` for finer-grained transition signaling. Currently inferred from pct crossing 100. Adding explicit events would reduce inference error at the cost of protocol complexity. Largely subsumed by the AGMH proposal above for the holder-gain case.
+- **Explicit holder events** — `AGM-GOT:<char>:<mobId>` / `AGM-LOST:<char>:<mobId>` for finer-grained transition signaling. Currently inferred from pct crossing 100. Adding explicit events would reduce inference error at the cost of protocol complexity. Largely subsumed by `AGMH:` for the holder-gain case (which now ships); only the holder-loss case remains uncovered, and it's a smaller value-add.
 - **Mob HP** — `mobId@<pct>:<hpPct>` would let the meter de-prioritize near-dead mobs. Possible compact extension.
 - **Versioning** — a `AGM-V2:` prefix would allow incompatible format changes while maintaining backward compatibility. Not needed yet; format hasn't changed.

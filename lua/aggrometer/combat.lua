@@ -17,6 +17,11 @@
 -- this specific signal source. We are NOT computing aggro from damage;
 -- we are using the existence of a hit/miss event as a holder signal.
 --
+-- See [[../decisions/0006-combat-event-broadcast|ADR 0006]] for the
+-- AGMH wire-protocol addition that propagates this signal to peers.
+-- Each character broadcasts its own hit set; the receiver feeds those
+-- into the same Priority -1 attribution chain via combat.recentAttackerCharOf().
+--
 -- Mob-name → spawn-id resolution: combat lines reference the attacker
 -- by display name, not spawn id. We resolve names against the current
 -- XTarget list (refreshed once per fetch tick by data.lua).
@@ -25,6 +30,14 @@
 --     currently targeting me); if none narrow, mark all matches.
 -- Over-attribution toward self is the safer error here vs the original
 -- bug that under-attributed (showing pet as holder while user got hit).
+--
+-- Local vs remote attacker state:
+--   _localAttackers  : refreshed by every detected event on this client.
+--                      Short TTL (default 5s) — covers the gap between
+--                      consecutive swings of a mob currently attacking me.
+--   _remoteAttackers : populated by AGMH receive. Long TTL (default 30s)
+--                      — must exceed share.keepaliveMs * 2 so a single
+--                      dropped chat message doesn't age out a peer's set.
 
 local mq = require('mq')
 
@@ -44,12 +57,32 @@ end
 
 -- mobId -> os.clock() of last detected attack-on-me event for that mob.
 -- Pruned by gc().
-local _attackedMe = {}
+local _localAttackers = {}
 
--- TTL (seconds). After this without a fresh hit/miss for a given mobId,
--- the mob is considered no longer-on-me and recentAttackerOf returns false.
--- Tunable via config.set('combat.attackerTtlSec', N); default 5s.
+-- charName -> { [mobId] = ts } mirroring _localAttackers but keyed by
+-- peer character name. Populated by ingestRemoteAttackers() when share.lua
+-- receives an AGMH: line. Pruned by gc() with a different (longer) TTL
+-- because peer state lives between AGMH publishes, not between events.
+local _remoteAttackers = {}
+
+-- Local TTL (seconds). After this without a fresh hit/miss for a given
+-- mobId, the mob is considered no-longer-on-me. Should comfortably exceed
+-- the gap between two consecutive mob swings (~3s for typical mobs).
+-- Tunable via config.set('combat.attackerTtlSec', N).
 local _ttlSec = 5.0
+
+-- Remote TTL (seconds). Must exceed share.keepaliveMs * 2 so that one
+-- dropped AGMH message doesn't prematurely drop a peer's set. The
+-- broadcast cadence is event-driven on set-membership changes (see
+-- ADR 0006), so a stable fight produces only keepalive publishes —
+-- losing one and we'd silently lose the peer for a chunk of time.
+-- Tunable via config.set('combat.remoteAttackerTtlSec', N).
+local _remoteTtlSec = 30.0
+
+-- My character name. Set by init() once after MQ has resolved Me.Name(),
+-- used to filter self-echoes in ingestRemoteAttackers and to label local
+-- entries in recentAttackerCharOf.
+local _myCharName = '?'
 
 -- Cached XTarget name index, refreshed once per data.fetch tick rather
 -- than once per fired event. Schema: { [normalizedName] = { mobId, ... } }
@@ -188,7 +221,7 @@ end
 
 local function markRecent(mobId)
     if not mobId or mobId == 0 then return end
-    _attackedMe[mobId] = os.clock()
+    _localAttackers[mobId] = os.clock()
 end
 
 -- Pick a writable directory for the tap log. Mirrors probe.lua: prefer
@@ -276,27 +309,112 @@ end
 -- ---------------------------------------------------------------------------
 -- public API
 
--- True if mobId has a recorded attack on me within the TTL window.
+-- True if SELF has a recorded attack on this mob within the local TTL.
+-- Backward-compat shim retained because data.lua, init.lua, and the slash
+-- command surface called this name before AGMH landed.
 function M.recentAttackerOf(mobId)
     if not mobId or mobId == 0 then return false end
-    local t = _attackedMe[mobId]
+    local t = _localAttackers[mobId]
     if not t then return false end
     return (os.clock() - t) <= _ttlSec
 end
 
--- Drop entries older than TTL. Cheap; called by data.fetch each tick.
+-- Returns the character name (self OR any peer) most-recently observed
+-- attacking mobId, or nil if no signal is within the relevant TTL. Most-
+-- recent timestamp wins across all sources because in reality only one
+-- character is the holder at any instant — disagreement means one source
+-- is stale, and we trust the freshest.
+function M.recentAttackerCharOf(mobId)
+    if not mobId or mobId == 0 then return nil end
+    local now = os.clock()
+    local bestChar, bestTs = nil, 0
+
+    -- Self
+    local lt = _localAttackers[mobId]
+    if lt and (now - lt) <= _ttlSec and lt > bestTs then
+        bestChar = _myCharName
+        bestTs = lt
+    end
+
+    -- Peers
+    for charName, mobs in pairs(_remoteAttackers) do
+        local rt = mobs[mobId]
+        if rt and (now - rt) <= _remoteTtlSec and rt > bestTs then
+            bestChar = charName
+            bestTs = rt
+        end
+    end
+
+    return bestChar
+end
+
+-- Returns a flat list of mobIds I've recorded as recently attacking me,
+-- filtered to within the local TTL. Used by share.lua to build AGMH
+-- payloads — represents the set of mobs whose attribution I want peers
+-- to credit to me.
+function M.localAttackerSet()
+    local out = {}
+    local now = os.clock()
+    for mobId, ts in pairs(_localAttackers) do
+        if (now - ts) <= _ttlSec then
+            table.insert(out, mobId)
+        end
+    end
+    return out
+end
+
+-- Called by share.lua when an AGMH: line arrives. Replaces the peer's
+-- entire attacker set (broadcasts are full snapshots — see ADR 0006).
+-- Self-echoes are dropped defensively even though share.lua already
+-- filters by sender. Empty mobIds are valid: they explicitly clear the
+-- peer's set (peer is no longer being hit by anything they track).
+function M.ingestRemoteAttackers(charName, mobIds)
+    if not charName or charName == '' then return end
+    if charName == _myCharName then return end
+    local now = os.clock()
+    if not mobIds or #mobIds == 0 then
+        _remoteAttackers[charName] = nil
+        return
+    end
+    local m = {}
+    for _, mobId in ipairs(mobIds) do
+        if type(mobId) == 'number' and mobId > 0 then
+            m[mobId] = now
+        end
+    end
+    _remoteAttackers[charName] = m
+end
+
+-- Drop entries older than TTL across both local and remote sets. Cheap;
+-- called by data.fetch each tick.
 function M.gc()
-    local cutoff = os.clock() - _ttlSec
-    for id, t in pairs(_attackedMe) do
-        if t < cutoff then _attackedMe[id] = nil end
+    local now = os.clock()
+    local lc = now - _ttlSec
+    for id, t in pairs(_localAttackers) do
+        if t < lc then _localAttackers[id] = nil end
+    end
+    local rc = now - _remoteTtlSec
+    for char, mobs in pairs(_remoteAttackers) do
+        for id, t in pairs(mobs) do
+            if t < rc then mobs[id] = nil end
+        end
+        if next(mobs) == nil then _remoteAttackers[char] = nil end
     end
 end
 
--- Snapshot for debug introspection. Returns { [mobId] = ageSec, ... }.
+-- Snapshot for debug introspection. Returns ages-in-seconds keyed by
+-- charName then mobId. Self entries are under _myCharName.
 function M.snapshot()
     local out, now = {}, os.clock()
-    for id, t in pairs(_attackedMe) do
-        out[id] = now - t
+    out[_myCharName] = {}
+    for id, t in pairs(_localAttackers) do
+        out[_myCharName][id] = now - t
+    end
+    for char, mobs in pairs(_remoteAttackers) do
+        out[char] = {}
+        for id, t in pairs(mobs) do
+            out[char][id] = now - t
+        end
     end
     return out
 end
@@ -307,7 +425,15 @@ function M.setTtl(seconds)
     end
 end
 
-function M.ttl() return _ttlSec end
+function M.setRemoteTtl(seconds)
+    if type(seconds) == 'number' and seconds > 0 then
+        _remoteTtlSec = seconds
+    end
+end
+
+function M.ttl()       return _ttlSec end
+function M.remoteTtl() return _remoteTtlSec end
+function M.myCharName() return _myCharName end
 
 -- Toggle tap. Returns (success, info) where info is the log path on
 -- "on" and the event count on "off", or an error string on failure.
@@ -341,12 +467,19 @@ function M.logCount() return _logCount end
 function M.applyConfig(config)
     local v = config.get('combat.attackerTtlSec')
     if type(v) == 'number' and v > 0 then _ttlSec = v end
+    local r = config.get('combat.remoteAttackerTtlSec')
+    if type(r) == 'number' and r > 0 then _remoteTtlSec = r end
 end
 
 -- Register chat events. Idempotent — re-registering with the same name
 -- just replaces the prior binding. mq.doevents() pumped from share.tick()
 -- in the main loop fires our handlers when matching lines arrive.
-function M.init()
+--
+-- charName is the local character name; resolved from mq.TLO.Me.Name() in
+-- init.lua before this runs. Used to label local entries in
+-- recentAttackerCharOf and to filter self-echo in ingestRemoteAttackers.
+function M.init(charName)
+    if charName and charName ~= '' then _myCharName = charName end
     if _initialized then return end
     pcall(function()
         -- Damage hits — plural and singular point(s) variants.

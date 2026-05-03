@@ -14,6 +14,7 @@
 
 local mq     = require('mq')
 local config = require('aggrometer.config')
+local combat = require('aggrometer.combat')
 
 local M = {}
 
@@ -47,6 +48,9 @@ local _lastPublishMs    = 0
 -- decide whether to publish immediately (vs waiting for keepalive).
 local _xtargetSnapshot  = {}    -- { mobId = pct } from last publish
 local _lastPetTargetId  = 0     -- pet's swing target from last publish
+local _lastAttackerKey  = ''    -- last AGMH attacker-set hash, for change
+                                -- detection. Set membership only — see
+                                -- attackerSetKey() comment for why.
 
 -- Verbose chat-tap toggle for debugging. When true, every fired hook
 -- logs to chat so we can see whether our event patterns are matching.
@@ -123,9 +127,25 @@ local function buildPetPublishPayload()
     return string.format('AGMP:%s:%d@100', petName, petTargetId)
 end
 
--- Publish a snapshot of self + pet aggro. Caller (M.tick) decides timing;
--- this just sends. _lastPublishMs is updated regardless of whether the
--- send actually succeeded (solo = no-op = still resets the keepalive timer).
+-- Build the AGMH: payload from combat.localAttackerSet(). Returns nil if
+-- the set is empty (don't broadcast empty sets — receivers will gc on TTL).
+-- Format: "AGMH:<charName>:<mobId>,<mobId>,..."  See ADR 0006.
+local function buildAttackerPublishPayload()
+    local mobs = combat.localAttackerSet()
+    if not mobs or #mobs == 0 then return nil end
+    -- Sort numerically for deterministic output (helps tests + log diffs).
+    table.sort(mobs)
+    local parts = {}
+    for _, mobId in ipairs(mobs) do
+        table.insert(parts, tostring(mobId))
+    end
+    return string.format('AGMH:%s:%s', _myCharName, table.concat(parts, ','))
+end
+
+-- Publish a snapshot of self + pet + recent-attackers state. Caller
+-- (M.tick) decides timing; this just sends. _lastPublishMs is updated
+-- regardless of whether the send actually succeeded (solo = no-op =
+-- still resets the keepalive timer).
 function M.publish()
     if not config.get('share.enabled') then return end
 
@@ -134,6 +154,9 @@ function M.publish()
 
     local petPayload = buildPetPublishPayload()
     if petPayload then sendToChannel(petPayload) end
+
+    local attackerPayload = buildAttackerPublishPayload()
+    if attackerPayload then sendToChannel(attackerPayload) end
 
     _lastPublishMs = nowMs()
 end
@@ -181,6 +204,22 @@ local function currentPetTargetId()
     return tlo(function() return mq.TLO.Me.Pet.Target.ID() end, 0)
 end
 
+-- Stable hash of the local attacker set (membership only, not timestamps).
+-- AGMH publish triggers on set membership changes, NOT on every per-event
+-- timestamp refresh — combat events fire dozens of times per second in
+-- heavy fights and we'd flood chat. Set additions/removals are far rarer
+-- and are what the receiver actually needs to know about; timestamp
+-- refreshes inside an unchanged set are conveyed implicitly by the
+-- keepalive cadence.
+local function attackerSetKey()
+    local mobs = combat.localAttackerSet()
+    if not mobs or #mobs == 0 then return '' end
+    table.sort(mobs)
+    local parts = {}
+    for _, m in ipairs(mobs) do parts[#parts+1] = tostring(m) end
+    return table.concat(parts, ',')
+end
+
 -- ---------------------------------------------------------------------------
 -- receive
 
@@ -203,6 +242,26 @@ local function handleAGMData(sender, body)
     _remote[charName] = { mobs = mobs, updated = nowMs() }
 end
 
+-- Parse an AGMH: payload body and feed it into combat. Body shape:
+--   "<charName>:<mobId>,<mobId>,..."
+-- Empty mob list explicitly clears the peer's set on this receiver.
+-- See ADR 0006.
+local function handleAGMHData(_sender, body)
+    local _, _, charName, mobsBlob = body:find('^([^:]+):(.*)$')
+    if not charName then return end
+    if charName == _myCharName then return end  -- defensive self-echo filter
+    local mobs = {}
+    if mobsBlob and mobsBlob ~= '' then
+        for entry in mobsBlob:gmatch('[^,]+') do
+            local mobId = tonumber(entry:match('^%s*(%d+)%s*$'))
+            if mobId and mobId > 0 then
+                table.insert(mobs, mobId)
+            end
+        end
+    end
+    combat.ingestRemoteAttackers(charName, mobs)
+end
+
 -- Shared dispatch — works regardless of which chat format the message
 -- arrived in. Tap logging happens before the self-echo filter so debug
 -- output shows everything we received.
@@ -215,6 +274,9 @@ local function dispatchAGM(sender, msg, source)
     if sender == _myCharName then return end
     if msg:sub(1, 16) == 'AGM-DEBUG-PING:' then
         chatf('received debug ping from %s: %s', sender, msg)
+    elseif msg:sub(1, 5) == 'AGMH:' then
+        -- Hit-event broadcast (ADR 0006). "These mobs are hitting me."
+        handleAGMHData(sender, msg:sub(6))
     elseif msg:sub(1, 5) == 'AGMP:' then
         -- Pet aggro broadcast; key by pet name. Receiver's data.lua
         -- attribution finds the pet in its local roster.
@@ -275,8 +337,10 @@ function M.tick()
     local keepalive     = config.get('share.keepaliveMs') or 15000
     local currentSnap   = sampleXTargetSnapshot()
     local currentPetTgt = currentPetTargetId()
+    local currentAttKey = attackerSetKey()
     local changed       = snapshotChanged(_xtargetSnapshot, currentSnap) or
-                          (currentPetTgt ~= _lastPetTargetId)
+                          (currentPetTgt ~= _lastPetTargetId) or
+                          (currentAttKey ~= _lastAttackerKey)
 
     local shouldPublish = false
     if changed and sinceLast >= changeMin then shouldPublish = true
@@ -286,6 +350,7 @@ function M.tick()
         M.publish()
         _xtargetSnapshot = currentSnap
         _lastPetTargetId = currentPetTgt
+        _lastAttackerKey = currentAttKey
     end
 end
 
@@ -349,8 +414,16 @@ function M.debug()
     chatf('transport: %s', (mode == 'raid') and '/rs' or (mode == 'group') and '/g' or '(none)')
 
     local payload = buildPublishPayloadFromMe()
-    if payload then chatf('current sample payload: %s', payload)
-    else chat('current sample payload: (empty — no XTargets to publish)') end
+    if payload then chatf('current AGM:  payload: %s', payload)
+    else chat('current AGM:  payload: (empty — no XTargets to publish)') end
+
+    local petPayload = buildPetPublishPayload()
+    if petPayload then chatf('current AGMP: payload: %s', petPayload)
+    else chat('current AGMP: payload: (no pet swing target)') end
+
+    local attPayload = buildAttackerPublishPayload()
+    if attPayload then chatf('current AGMH: payload: %s', attPayload)
+    else chat('current AGMH: payload: (empty — no recent local attackers)') end
 
     local testMsg = string.format('AGM-DEBUG-PING:%s:%d', _myCharName, math.floor(os.clock() * 1000))
     local ok = sendToChannel(testMsg)
