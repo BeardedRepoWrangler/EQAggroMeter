@@ -345,14 +345,20 @@ local function colorForMob(holderMember, mob)
     return COLOR.HOLDER
 end
 
--- Helper: extract x/y from an ImVec2-or-table return. The MQ Lua ImGui
--- binding sometimes hands back ImVec2 with .x/.y properties, sometimes a
--- 2-element table. Handle both.
-local function vec2xy(v)
-    if type(v) == 'table' then
-        return (v.x or v[1] or 0), (v.y or v[2] or 0)
-    end
-    return 0, 0
+-- Extract x from CalcTextSize result regardless of binding return form.
+local function textWidth(s)
+    if not s or s == '' then return 0 end
+    local sz = ImGui.CalcTextSize(s)
+    if type(sz) == 'table' then return sz.x or sz[1] or 0 end
+    return 0
+end
+
+-- Extract first numeric component from ContentRegionAvail-like calls.
+local function availWidth()
+    local v = ImGui.GetContentRegionAvail()
+    if type(v) == 'table' then return v.x or v[1] or 400 end
+    if type(v) == 'number' then return v end
+    return 400
 end
 
 local function drawMobs(roster)
@@ -374,7 +380,6 @@ local function drawMobs(roster)
         local pct = mob.pctAggro or 0
         local fill = math.max(0, math.min(100, pct)) / 100.0
 
-        -- Three text segments: left (mob), middle (holder), right (threat)
         local mobName   = mob.mobName or '?'
         local holderStr = mob.holderName or '?'
         local threatStr
@@ -389,46 +394,45 @@ local function drawMobs(roster)
             threatStr = (threatStr == '' and '*' or (threatStr .. ' *'))
         end
 
-        -- Draw bar with EMPTY overlay so we can position text manually.
+        -- Capture row geometry before drawing the bar so we can overlay
+        -- text at the same Y position afterward.
+        local rowStartX = ImGui.GetCursorPosX()
+        local rowStartY = ImGui.GetCursorPosY()
+        local barWidth  = availWidth()
+
+        -- Draw the bar with empty overlay (we'll position our own text).
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, color[1], color[2], color[3], color[4])
         ImGui.ProgressBar(fill, -1, 18, '')
         ImGui.PopStyleColor()
 
-        -- Capture click events on the bar BEFORE the overlay code runs.
-        -- IsItemClicked queries the most recent item — the ProgressBar.
+        -- Capture click events on the bar (IsItemClicked targets last item).
+        local afterBarY    = ImGui.GetCursorPosY()
         local leftClicked  = ImGui.IsItemClicked(0)
         local rightClicked = ImGui.IsItemClicked(1)
 
-        -- Overlay three text segments via the window's draw list. Wrapped
-        -- in pcall so binding incompatibilities don't crash the UI; on
-        -- failure we fall back to a single combined string below the bar.
-        local overlayOk = pcall(function()
-            local minX, minY = vec2xy(ImGui.GetItemRectMin())
-            local maxX, maxY = vec2xy(ImGui.GetItemRectMax())
-            local barH = maxY - minY
+        -- Overlay three text segments by rewinding the cursor to the bar's
+        -- Y position. Pure SetCursorPos*/Text — no draw-list API needed.
+        local hw = textWidth(holderStr)
+        local tw = textWidth(threatStr)
+        local textY  = rowStartY + 2
+        local leftX  = rowStartX + 6
+        local centX  = rowStartX + (barWidth / 2) - (hw / 2)
+        local rightX = rowStartX + barWidth - tw - 6
 
-            local dl   = ImGui.GetWindowDrawList()
-            local tcol = ImGui.GetColorU32(ImGuiCol.Text)
+        ImGui.SetCursorPosY(textY); ImGui.SetCursorPosX(leftX)
+        ImGui.Text(mobName)
 
-            local hw   = select(1, vec2xy(ImGui.CalcTextSize(holderStr)))
-            local tw   = (threatStr ~= '') and select(1, vec2xy(ImGui.CalcTextSize(threatStr))) or 0
-            local _, h = vec2xy(ImGui.CalcTextSize(mobName))
-            if h <= 0 then h = 14 end
-            local textY = minY + (barH - h) / 2
+        ImGui.SetCursorPosY(textY); ImGui.SetCursorPosX(centX)
+        ImGui.Text(holderStr)
 
-            dl:AddText(minX + 6, textY, tcol, mobName)
-            dl:AddText((minX + maxX) / 2 - hw / 2, textY, tcol, holderStr)
-            if threatStr ~= '' then
-                dl:AddText(maxX - tw - 6, textY, tcol, threatStr)
-            end
-        end)
-
-        if not overlayOk then
-            -- Binding doesn't expose draw-list APIs cleanly. Fall back to
-            -- a single text line below the bar.
-            ImGui.TextColored(COLOR.DIM[1], COLOR.DIM[2], COLOR.DIM[3], COLOR.DIM[4],
-                string.format('  %s  →  %s  %s', mobName, holderStr, threatStr))
+        if threatStr ~= '' then
+            ImGui.SetCursorPosY(textY); ImGui.SetCursorPosX(rightX)
+            ImGui.Text(threatStr)
         end
+
+        -- Restore cursor below the bar so the next row stacks below.
+        ImGui.SetCursorPosY(afterBarY)
+        ImGui.SetCursorPosX(rowStartX)
 
         -- Apply captured clicks
         if leftClicked then
