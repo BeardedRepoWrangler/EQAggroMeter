@@ -1,27 +1,25 @@
 -- aggrometer/share.lua
 --
--- Inter-character XTarget sharing via EQ's built-in chat channels.
--- Designed to use ONLY in-game mechanisms (no external EQBC server, no
--- port forwarding, no NetBots required) — traffic goes through EQ's
--- chat servers.
+-- Inter-character XTarget sharing via EQ group chat (/g) or raid chat (/rs).
 --
--- Channel naming: agm-<leader>-XXXXX (5-char random suffix, persisted
--- per leader in config so re-grouping with the same person re-joins
--- the same channel automatically).
+-- Originally designed to use EQ's custom chat channels (/join), but
+-- Ascendant's Universal Chat service is unreliable / unavailable, so the
+-- transport was switched to group/raid chat. Same wire format, just
+-- routed through a different chat command. Auto-scoped to your group/raid
+-- — no channel names, no /join, no announce/accept dance.
 --
 -- Wire format:
---   Publish:  AGM:<charName>:<mobId>@<pct>,<mobId>@<pct>,...
---   Invite:   AGM-INVITE:<channelName>
+--   AGM:<charName>:<mobId>@<pct>,<mobId>@<pct>,...
 --
--- Limitations honestly:
---   * EQ chat has latency (~0.5–2s) and rate-limits. We publish at 2Hz max.
---   * Other group members must also be running this script for it to work.
---   * Channel names must be ≤20 chars (EQ limit), so leader names get
---     truncated to 8 chars. Could collide for users with same first-8.
---   * Two unrelated groups whose leaders share a name AND collide on the
---     5-char random suffix would cross-talk — vanishingly unlikely.
---   * /lua stop kills the script abruptly; we won't /leave the channel
---     cleanly. EQ keeps the join until you log out or manually /leave.
+-- Trade-off: AGM-prefixed lines are visible in your group chat. Filter
+-- them to a separate window via EQ's chat options if it bothers you.
+--
+-- Limitations:
+--   * Chat latency (~0.5–2s).
+--   * Both peers must run the script.
+--   * Only works while in an EQ group/raid (the group IS the scope).
+--   * /lua stop kills the script abruptly; nothing to clean up since
+--     we don't /join anything.
 
 local mq     = require('mq')
 local config = require('aggrometer.config')
@@ -166,19 +164,26 @@ local function findChannelSlot(channelName)
     return nil
 end
 
-local function joinEQChannel(channelName)
-    pcall(function() mq.cmdf('/join %s', channelName) end)
-end
+-- /join and /leave are no-ops in the group-chat transport — there's no
+-- channel to manage. Kept as functions so existing call sites compile.
+local function joinEQChannel(_) end
+local function leaveEQChannel(_) end
 
-local function leaveEQChannel(channelName)
-    pcall(function() mq.cmdf('/leave %s', channelName) end)
-end
-
-local function sendToChannel(channelName, message)
-    local slot = findChannelSlot(channelName)
-    if not slot then return false end
-    pcall(function() mq.cmdf('/%d %s', slot, message) end)
-    return true
+-- Send via group chat or raid chat depending on current mode. The
+-- channelName argument is ignored — kept for API compatibility with
+-- code that was written for the old custom-channel transport.
+local function sendToChannel(_channelName, message)
+    local raidMembers = tlo(function() return mq.TLO.Raid.Members() end, 0)
+    if raidMembers > 0 then
+        pcall(function() mq.cmd('/rs ' .. message) end)
+        return true
+    end
+    local groupMembers = tlo(function() return mq.TLO.Group.Members() end, 0)
+    if groupMembers > 0 then
+        pcall(function() mq.cmd('/g ' .. message) end)
+        return true
+    end
+    return false  -- not in a group/raid, nowhere to send
 end
 
 -- ---------------------------------------------------------------------------
@@ -335,44 +340,26 @@ function M.tick()
 end
 
 -- /agm share on
+-- In the group-chat transport, "on" just means "broadcast my XTarget to
+-- group chat every 2s." No channel to join, no name to announce.
 function M.start()
     local leader, kind = detectLeader()
     if not leader then
         chat('not in a group or raid — nothing to share')
         return
     end
-    local entry = loadChannel(leader)
-    local suffix
-    if entry and entry.suffix and entry.kind == kind then
-        suffix = entry.suffix
-        chatf('rejoining remembered channel for %s (%s)', leader, kind)
-    else
-        suffix = randSuffix(5)
-        chatf('creating new channel for %s (%s)', leader, kind)
-    end
-    saveChannel(leader, suffix, kind)
-    _activeLeader  = leader
-    _activeKind    = kind
-    _activeChannel = buildChannelName(leader, suffix)
+    _activeLeader = leader
+    _activeKind   = kind
     config.set('share.enabled', true)
-    joinEQChannel(_activeChannel)
-    chatf('share on. channel: \ay%s\ax', _activeChannel)
-    chatf('tell others: \ay/agm announce\ax  (broadcasts invite to %s chat)',
+    chatf('share on. transport: %s chat. each peer running the script auto-publishes; no further action needed.',
         kind == 'raid' and 'raid' or 'group')
+    chatf('tip: filter \"AGM:\" lines to a hidden chat window if the spam bothers you.')
 end
 
 -- /agm share off
 function M.stop()
-    if _activeChannel then
-        leaveEQChannel(_activeChannel)
-        chatf('left channel %s', _activeChannel)
-    end
-    if _activeLeader then
-        config.set('channels.' .. _activeLeader .. '.autoJoin', false)
-    end
-    _activeChannel = nil
-    _activeLeader  = nil
-    _activeKind    = nil
+    _activeLeader = nil
+    _activeKind   = nil
     config.set('share.enabled', false)
     chat('share off')
 end
@@ -380,8 +367,11 @@ end
 -- /agm share status
 function M.status()
     chatf('share enabled: %s', tostring(config.get('share.enabled')))
-    chatf('  channel: %s', tostring(_activeChannel or '(none)'))
-    chatf('  trust:   %s', tostring(config.get('share.trust')))
+    local mode = (tlo(function() return mq.TLO.Raid.Members() end, 0) > 0) and 'raid'
+              or (tlo(function() return mq.TLO.Group.Members() end, 0) > 0) and 'group'
+              or 'solo'
+    chatf('  current mode: %s   (broadcasts go to %s chat)',
+        mode, (mode == 'raid') and 'raid' or (mode == 'group') and 'group' or '(none — nothing broadcast)')
     local count = 0
     for k, _ in pairs(_remote) do count = count + 1 end
     chatf('  remote peers heard from: %d', count)
@@ -392,45 +382,15 @@ function M.status()
     end
 end
 
--- /agm announce
+-- /agm announce — kept for backward compat; explains it's not needed.
 function M.announce()
-    if not _activeChannel then
-        chat('not sharing yet — run /agm share on first')
-        return
-    end
-    local kind = _activeKind or 'group'
-    local cmd = (kind == 'raid') and '/rs' or '/g'
-    pcall(function() mq.cmdf('%s AGM-INVITE:%s', cmd, _activeChannel) end)
-    chatf('announced channel %s to %s chat', _activeChannel, kind)
+    chat('group-chat transport doesn\'t need announce — every peer running the script auto-publishes to /g.')
+    chat('just have your buddy run /agm share on. you\'ll see his AGM: lines in group chat once he does.')
 end
 
--- /agm accept [channelname]
--- With no arg: joins the most recent invite seen via chat hook.
--- With arg: joins that channel directly. Useful when your buddy can't
--- /g you (not in same group yet) and just told you the channel name
--- via /tell, voice chat, Discord, etc.
-function M.acceptInvite(channelOverride)
-    local channel
-    if channelOverride and channelOverride ~= '' then
-        channel = channelOverride
-    elseif _pendingInvite then
-        channel = _pendingInvite.channel
-        _pendingInvite = nil
-    else
-        chat('no pending invite. usage: /agm accept [channelname]')
-        return
-    end
-    -- Parse the channel back to extract the leader+suffix so we can save it.
-    local leader, suffix = channel:match('^agm%-(.+)%-([^%-]+)$')
-    if leader and suffix then
-        saveChannel(leader, suffix, 'group')  -- treat invited channels as group
-        _activeLeader = leader
-        _activeKind   = 'group'
-    end
-    _activeChannel = channel
-    config.set('share.enabled', true)
-    joinEQChannel(channel)
-    chatf('accepted; joined channel %s', channel)
+-- /agm accept — kept for backward compat; explains it's not needed.
+function M.acceptInvite(_channelOverride)
+    chat('group-chat transport doesn\'t use invites. just run /agm share on while in your group/raid.')
 end
 
 -- /agm trust on/off
@@ -496,28 +456,13 @@ function M.activeChannel() return _activeChannel end
 -- flowing between peers. Run on BOTH ends, paste output to compare.
 function M.debug()
     chat('--- share debug ---')
-    chat(string.format('me: %s   share.enabled: %s   active channel: %s',
-        _myCharName, tostring(config.get('share.enabled')), tostring(_activeChannel)))
+    chatf('me: %s   share.enabled: %s', _myCharName, tostring(config.get('share.enabled')))
 
-    -- Joined channels per EverQuest TLO
-    local count = tlo(function() return mq.TLO.EverQuest.ChatChannels() end, 0)
-    chatf('joined channels (%d):', count)
-    for i = 1, count do
-        local name = tlo(function() return mq.TLO.EverQuest.ChatChannel(i)() end, '?')
-        local mark = (_activeChannel and name and name:lower() == _activeChannel:lower()) and '  <-- our channel' or ''
-        chatf('  slot %d: %s%s', i, tostring(name), mark)
-    end
-
-    -- Slot we'd send to
-    if _activeChannel then
-        local slot = findChannelSlot(_activeChannel)
-        if slot then
-            chatf('publish would send to slot %d via /%d', slot, slot)
-        else
-            chatf('\arWARNING: active channel %s not found in joined list — /join may have failed\ax',
-                _activeChannel)
-        end
-    end
+    local raid = tlo(function() return mq.TLO.Raid.Members() end, 0)
+    local grp  = tlo(function() return mq.TLO.Group.Members() end, 0)
+    local mode = (raid > 0) and 'raid' or (grp > 0) and 'group' or 'solo'
+    chatf('mode: %s   group members: %d   raid members: %d', mode, grp, raid)
+    chatf('transport: %s', (mode == 'raid') and '/rs' or (mode == 'group') and '/g' or '(none)')
 
     -- Sample payload
     local payload = buildPublishPayloadFromMe()
@@ -528,12 +473,12 @@ function M.debug()
     end
 
     -- Send a test ping
-    if _activeChannel then
-        local testMsg = string.format('AGM-DEBUG-PING:%s:%d', _myCharName, math.floor(os.clock() * 1000))
-        local ok = sendToChannel(_activeChannel, testMsg)
-        chatf('sent test ping: %s   (peers should see it in chat)', ok and 'ok' or 'FAILED')
-        chatf('test message body was: %s', testMsg)
-    end
+    local testMsg = string.format('AGM-DEBUG-PING:%s:%d', _myCharName, math.floor(os.clock() * 1000))
+    local ok = sendToChannel(nil, testMsg)
+    chatf('sent test ping: %s   (peers should see it in their %s chat)',
+        ok and 'ok' or 'FAILED (not in group/raid)',
+        (mode == 'raid') and 'raid' or 'group')
+    chatf('test message body was: %s', testMsg)
 
     -- Remote peers
     local rcount = 0
