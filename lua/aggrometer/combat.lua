@@ -160,10 +160,17 @@ end
 
 function M.refreshXTargetIndex()
     local idx = {}
+    -- Dedup by mobId: a single mob can occupy multiple XTarget slots
+    -- simultaneously (XTarget pct is eventually consistent across slots,
+    -- so the same Spawn.ID surfaces in slot N and slot M). Without this
+    -- guard, eviction logs show duplicate mobIds in the matches list and
+    -- the index does redundant hashmap work per event.
+    local seen = {}
     local slots = tlo(function() return mq.TLO.Me.XTargetSlots() end, 0)
     for i = 1, slots do
         local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
-        if mobId > 0 then
+        if mobId > 0 and not seen[mobId] then
+            seen[mobId] = true
             local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, '')
             local key = normalizeMobName(mobName)
             if key ~= '' then
