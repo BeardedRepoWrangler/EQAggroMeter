@@ -326,6 +326,80 @@ local function drawMainBarPopup(m)
     end
 end
 
+-- Color rules for the new mob-slot view.
+--
+-- Colors reflect the situation per mob, not per player:
+--   Holder is non-MT non-pet (random DPS pulled aggro)  → red (alert)
+--   Holder is MT or pet, threat (non-holder pct) >= 80  → magenta (warning)
+--   Holder is MT or pet, threat < 80                    → green (safe)
+--   No identifiable holder                              → red (unknown)
+local function colorForMob(holderMember, mob)
+    if not holderMember then return COLOR.OVER end
+    -- MT and pets are both acceptable holders. Non-MT player holding =
+    -- mob is in the wrong place.
+    if not holderMember.isMT and not holderMember.isPet then
+        return COLOR.OVER
+    end
+    local pct = mob.pctAggro or 0
+    if pct >= 80 then return COLOR.NEAR end
+    return COLOR.HOLDER
+end
+
+local function drawMobs(roster)
+    if not roster.mobs or #roster.mobs == 0 then
+        ImGui.TextColored(COLOR.DIM[1], COLOR.DIM[2], COLOR.DIM[3], COLOR.DIM[4],
+            'No mobs')
+        return
+    end
+
+    -- spawnId -> member lookup so colorForMob can check holder's role flags
+    local memberById = {}
+    for _, m in ipairs(roster.members or {}) do
+        if m.spawnId then memberById[m.spawnId] = m end
+    end
+
+    for _, mob in ipairs(roster.mobs) do
+        local holder = memberById[mob.holderId]
+        local color = colorForMob(holder, mob)
+        local pct = mob.pctAggro or 0
+        local fill = math.max(0, math.min(100, pct)) / 100.0
+        local marker = mob.isCurrent and ' *' or ''
+        local threatStr = ''
+        if mob.threatChar and pct > 0 then
+            threatStr = string.format('  threat: %s %d%%', mob.threatChar, pct)
+        end
+        local label = string.format('%s  →  %s%s%s',
+            mob.mobName or '?',
+            mob.holderName or '?',
+            threatStr,
+            marker)
+
+        ImGui.PushStyleColor(ImGuiCol.PlotHistogram, color[1], color[2], color[3], color[4])
+        ImGui.ProgressBar(fill, -1, 18, label)
+        ImGui.PopStyleColor()
+
+        -- Click handlers — slot is stable, so click target stays consistent
+        -- even as the holder changes across ticks.
+        if ImGui.IsItemClicked(0) then
+            mq.cmdf('/target id %d', mob.mobId)
+        end
+        if ImGui.IsItemClicked(1) then
+            ImGui.OpenPopup('mob_' .. tostring(mob.mobId))
+        end
+        if ImGui.BeginPopup('mob_' .. tostring(mob.mobId)) then
+            if ImGui.MenuItem('Target ' .. (mob.mobName or 'mob')) then
+                mq.cmdf('/target id %d', mob.mobId)
+            end
+            if mob.holderName and mob.holderName ~= '?' and mob.holderName ~= '' then
+                if ImGui.MenuItem('Assist ' .. mob.holderName) then
+                    mq.cmdf('/assist %s', mob.holderName)
+                end
+            end
+            ImGui.EndPopup()
+        end
+    end
+end
+
 local function drawSubBars(m)
     -- Indent for visual hierarchy. We previously tried ImGui.PushStyleVar
     -- (FramePadding, ...) to compress sub-bar height further, but that
@@ -403,10 +477,8 @@ local function drawBars(roster)
             drawMainBarPopup(m)
         end
 
-        -- Step 5: per-mob xtarget sub-bars (self only — see data.lua)
-        if shouldShowSubBars(m) then
-            drawSubBars(m)
-        end
+        -- Sub-bars per player removed — replaced by the dedicated mob-slot
+        -- view (drawMobs) which gives stable click targets per mob.
     end
 end
 
@@ -434,7 +506,9 @@ local function drawInner()
         ImGui.Separator()
         drawFilters()
         ImGui.Separator()
-        drawBars(roster)
+        drawBars(roster)         -- player main bars at top (overview)
+        ImGui.Separator()
+        drawMobs(roster)         -- stable mob-slot view (XTarget-style)
         drawFooter(roster)
     end
 end

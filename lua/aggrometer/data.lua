@@ -60,6 +60,11 @@ local _lastFetchClock = 0
 -- resets when the spawn would have come back on its own.
 local _slotState = {}
 
+-- Stable mob-slot ordering for the mob-list UI. Mobs first appearing get
+-- appended; mobs no longer in any holder's list get pruned. Slot
+-- positions stay stable across fetches so click targets don't jump.
+local _mobOrder = {}
+
 -- ---------------------------------------------------------------------------
 -- roster construction
 
@@ -306,6 +311,7 @@ local function buildXTargetsByHolder(target, members, remoteData)
             pctAggro   = displayPct,
             isCurrent  = (mobId == currentTargetId),
             threatChar = maxNonHolderChar,
+            holderId   = holderId,  -- for the mob-slot UI
         })
     end
 
@@ -385,9 +391,7 @@ local function buildRoster()
 
     -- Step 5 v2 + Step 7 phase 2: distribute xtarget mobs to whichever
     -- roster member is currently holding aggro on each, using merged
-    -- local + remote (peer-published) data. The function reads
-    -- share.remoteData() via the passed map so attribution is informed
-    -- by every peer's own perspective on their xtargets.
+    -- local + remote (peer-published) data.
     local remoteData = share.remoteData() or {}
     local xByHolder = buildXTargetsByHolder(target, members, remoteData)
     for _, m in ipairs(members) do
@@ -395,6 +399,47 @@ local function buildRoster()
             m.xtargets = xByHolder[m.spawnId]
         else
             m.xtargets = nil  -- clear stale attributions
+        end
+    end
+
+    -- Build a stable slotted mob list for the XTarget-style mob view.
+    -- Mobs first appearing get appended to _mobOrder; mobs no longer
+    -- present get pruned; existing mobs stay in their slot. Each entry
+    -- carries holderId/holderName for the UI to display.
+    local nameById = {}
+    for _, m in ipairs(members) do
+        if m.spawnId and m.name then nameById[m.spawnId] = m.name end
+    end
+    local activeMobsById = {}
+    for holderId, mobs in pairs(xByHolder) do
+        for _, mob in ipairs(mobs) do
+            mob.holderName = nameById[holderId] or '?'
+            activeMobsById[mob.mobId] = mob
+        end
+    end
+    -- Prune dead mobs from order, preserving relative positions.
+    local newOrder = {}
+    local seenInOrder = {}
+    for _, mid in ipairs(_mobOrder) do
+        if activeMobsById[mid] and not seenInOrder[mid] then
+            table.insert(newOrder, mid)
+            seenInOrder[mid] = true
+        end
+    end
+    -- Append new mobs not yet in order.
+    for mid, _ in pairs(activeMobsById) do
+        if not seenInOrder[mid] then
+            table.insert(newOrder, mid)
+        end
+    end
+    _mobOrder = newOrder
+    -- Final ordered list with stable slot indices.
+    local slottedMobs = {}
+    for slotIdx, mid in ipairs(_mobOrder) do
+        local mob = activeMobsById[mid]
+        if mob then
+            mob.slot = slotIdx
+            table.insert(slottedMobs, mob)
         end
     end
 
@@ -432,6 +477,7 @@ local function buildRoster()
         secondaryName     = target.secondaryName,
         secondaryPctAggro = target.secondaryPctAggro,
         secondaryIsHolder = target.secondaryIsHolder,
+        mobs              = slottedMobs,  -- stable slotted mob list
         lastUpdated       = os.clock(),
     }
 end
