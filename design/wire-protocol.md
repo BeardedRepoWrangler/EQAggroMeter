@@ -51,7 +51,9 @@ Example (Etcshadow being hit by mobs 433 and 515):
 AGMH:Etcshadow:433,515
 ```
 
-Empty publisher set → no broadcast. Receivers age out a peer's entry via `combat.remoteAttackerTtlSec` (default 30s, must exceed `keepaliveMs * 2`).
+Empty body — `AGMH:<charName>:` with nothing after the second colon — is a valid message that explicitly clears the publisher's attacker set on the receiver. It's emitted once on the publish cycle following a non-empty → empty transition (e.g., a mob retargeted to the tank and you're no longer being hit). Without this signal the receiver would keep the stale set for up to `combat.remoteAttackerTtlSec` (default 30s) — long enough to be visibly wrong on a peer's screen while your own meter has already correctly dropped the attribution after the local 5s TTL.
+
+During pure downtime (set has been empty across multiple cycles), no broadcasts fire because the change-detect in `share.lua:tick()` doesn't trigger. Receivers age out via the remote TTL as a last-resort cleanup for missed transitions.
 
 ### `AGMP:` — pet aggro snapshot
 

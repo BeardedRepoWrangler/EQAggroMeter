@@ -127,10 +127,25 @@ local function buildPetPublishPayload()
     return string.format('AGMP:%s:%d@100', petName, petTargetId)
 end
 
--- Build the AGMH: payload from combat.localAttackerSet(). Returns nil if
--- the set is empty (don't broadcast empty sets — receivers will gc on TTL).
--- Format: "AGMH:<charName>:<mobId>,<mobId>,..."  See ADR 0006.
-local function buildAttackerPublishPayload()
+-- Build the AGMH: payload from combat.localAttackerSet(). Returns nil for
+-- "no broadcast needed this cycle." Two non-nil cases:
+--   1. Non-empty set → "AGMH:<me>:<mobId>,<mobId>,..."
+--   2. forceEmpty=true → "AGMH:<me>:" (empty body, explicit clear).
+--      Caller passes this when the set just transitioned from non-empty to
+--      empty so peers can drop stale Priority -1 attribution within one
+--      publish cycle instead of waiting for the 30s remote TTL. Without
+--      this signal there's a TTL-asymmetry race: my client correctly drops
+--      attribution after the local 5s TTL expires, but a peer's view stays
+--      stuck on me as holder for up to 30s. (See log/2026-05-03.md for the
+--      observation that motivated the fix.)
+-- Empty-set during pure downtime (set stays empty across cycles) does not
+-- trigger an empty broadcast — that case is handled by the change-detect
+-- in tick() never firing in the first place. Only the *transition* from
+-- non-empty to empty produces a clear broadcast.
+local function buildAttackerPublishPayload(forceEmpty)
+    if forceEmpty then
+        return string.format('AGMH:%s:', _myCharName)
+    end
     local mobs = combat.localAttackerSet()
     if not mobs or #mobs == 0 then return nil end
     -- Sort numerically for deterministic output (helps tests + log diffs).
@@ -146,7 +161,12 @@ end
 -- (M.tick) decides timing; this just sends. _lastPublishMs is updated
 -- regardless of whether the send actually succeeded (solo = no-op =
 -- still resets the keepalive timer).
-function M.publish()
+--
+-- forceEmptyAttackers=true tells the AGMH builder to emit an explicit
+-- empty body ("AGMH:<me>:") so peers can clear our stale entry on the
+-- spot. Set by tick() on the cycle following a non-empty→empty
+-- attacker-set transition; see buildAttackerPublishPayload header.
+function M.publish(forceEmptyAttackers)
     if not config.get('share.enabled') then return end
 
     local payload = buildPublishPayloadFromMe()
@@ -155,7 +175,7 @@ function M.publish()
     local petPayload = buildPetPublishPayload()
     if petPayload then sendToChannel(petPayload) end
 
-    local attackerPayload = buildAttackerPublishPayload()
+    local attackerPayload = buildAttackerPublishPayload(forceEmptyAttackers)
     if attackerPayload then sendToChannel(attackerPayload) end
 
     _lastPublishMs = nowMs()
@@ -342,12 +362,17 @@ function M.tick()
                           (currentPetTgt ~= _lastPetTargetId) or
                           (currentAttKey ~= _lastAttackerKey)
 
+    -- Transition: I had attackers a moment ago, now I don't. Tell peers
+    -- explicitly so their _remoteAttackers entry for me clears within
+    -- one publish cycle instead of waiting for the 30s remote TTL.
+    local justEmptied = (currentAttKey == '' and _lastAttackerKey ~= '')
+
     local shouldPublish = false
     if changed and sinceLast >= changeMin then shouldPublish = true
     elseif sinceLast >= keepalive then shouldPublish = true end
 
     if shouldPublish then
-        M.publish()
+        M.publish(justEmptied)
         _xtargetSnapshot = currentSnap
         _lastPetTargetId = currentPetTgt
         _lastAttackerKey = currentAttKey
