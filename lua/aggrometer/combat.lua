@@ -306,6 +306,39 @@ local function onMiss(line, attackerName)
     dispatch(line, attackerName, 'miss')
 end
 
+-- Hit on anyone-not-me. Pattern: "<attacker> <target> for <n> point(s) of
+-- damage."  Matches every melee damage line in the zone, but we only act
+-- when the target is NOT "YOU" — that case is handled by onHit above and
+-- already credits us correctly. For non-YOU targets, the line proves the
+-- mob is currently attacking someone else (your pet, a peer, a peer's
+-- pet), so any local entry we hold for that mob is stale by definition
+-- and we evict on the spot.
+--
+-- Why this matters: without this signal, our local _localAttackers entry
+-- only ages out via the local TTL (default 5s). When a pet peels a mob
+-- off us, EQ stops sending us hit events but the existing entry sticks
+-- around for the full TTL — both our own meter AND any peer's meter (via
+-- the AGMH wire protocol) show stale "I'm holding" attribution for the
+-- TTL duration before correcting. Eviction-on-other-hit cuts that window
+-- from 5s down to ~1 mob swing rate (typically 2s).
+local function onOtherHit(line, attackerAndVerb, target, _damage)
+    if not target or target == 'YOU' then return end
+    -- Resolve via the same multi-candidate normalization onHit/onMiss
+    -- use, so verb / possessive / miss-form-style #1# captures all work.
+    local mobIds = resolveAttacker(attackerAndVerb)
+    local evicted = false
+    for _, mobId in ipairs(mobIds) do
+        if _localAttackers[mobId] then
+            _localAttackers[mobId] = nil
+            evicted = true
+        end
+    end
+    if evicted and _eventTap then
+        writeTapLine('evict', string.format('%s -> %s', attackerAndVerb, target),
+            mobIds)
+    end
+end
+
 -- ---------------------------------------------------------------------------
 -- public API
 
@@ -482,13 +515,20 @@ function M.init(charName)
     if charName and charName ~= '' then _myCharName = charName end
     if _initialized then return end
     pcall(function()
-        -- Damage hits — plural and singular point(s) variants.
+        -- Damage hits on me — plural and singular point(s) variants.
         mq.event('agm_combat_hit_pl', '#1# YOU for #2# points of damage.', onHit)
         mq.event('agm_combat_hit_sg', '#1# YOU for #2# point of damage.',  onHit)
         -- Misses + defensive results. EQ has many "tries to <verb>" forms
         -- (hit, bite, slash, smash...); we capture <verb> as #2# and
         -- discard it — only the attacker (#1#) matters for attribution.
         mq.event('agm_combat_miss',   '#1# tries to #2# YOU#*#',           onMiss)
+        -- Damage hits on anyone-not-me — used to evict stale entries fast
+        -- when a pet peels a mob off us. Pattern is more general than the
+        -- onHit patterns; both fire on hits to me but onOtherHit short-
+        -- circuits when target=="YOU". onOtherHit alone fires for hits on
+        -- everyone else (own pet, peers, peer pets, group NPCs).
+        mq.event('agm_combat_other_pl', '#1# #2# for #3# points of damage.', onOtherHit)
+        mq.event('agm_combat_other_sg', '#1# #2# for #3# point of damage.',  onOtherHit)
     end)
     _initialized = true
 end

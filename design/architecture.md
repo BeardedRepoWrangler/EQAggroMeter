@@ -101,8 +101,11 @@ The previous "Priority 2: mob == Me.Pet.Target.ID → pet" rule was removed in A
 
 `mq.event` matches lines with patterns:
 
-- `<attacker> YOU for <n> point(s) of damage.` (hits)
-- `<attacker> tries to <verb> YOU<rest>` (misses + defensive results — dodge, parry, riposte, block)
+- `<attacker> YOU for <n> point(s) of damage.` (hits on me — feeds `_localAttackers`)
+- `<attacker> tries to <verb> YOU<rest>` (misses + defensive results on me — feeds `_localAttackers`)
+- `<attacker> <target> for <n> point(s) of damage.` (hits on anyone — when `<target>` is NOT "YOU", evicts the attacker's `_localAttackers` entry, because the mob is now hitting someone else and our claim is stale by definition)
+
+The third pattern is critical for fast peel detection. When your pet (or a peer / peer's pet) takes the mob off you, EQ stops logging hits-on-you, but a `_localAttackers` entry sticks around for the full local TTL (default 5s) and during that window both your own meter AND every peer's meter via the AGMH wire protocol show stale "I'm holding" attribution. The eviction pattern collapses that window from 5s to ~1 mob swing (~2s typical) by reacting to the first hit on the new target.
 
 The `<attacker>` capture is reduced to a mob name by trying multiple normalization candidates: as-is (handles miss form, where `#1#` is just the mob name), verb-stripped (handles hit form, where `#1#` is `<mob> <verb>`), and possessive-stripped (handles limb-attack form, where `#1#` is `<mob>'s <part> <verb>`). First candidate that lands on the current XTarget index wins. The index is a per-fetch cached `name → mobIds` map refreshed by `data.fetch`, so each event fires O(1) on the hot path.
 
