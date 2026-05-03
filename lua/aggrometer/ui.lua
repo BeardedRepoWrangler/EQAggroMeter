@@ -247,10 +247,8 @@ end
 
 local function drawFooter(roster)
     ImGui.Separator()
-    local age = math.max(0, os.clock() - (roster.lastUpdated or 0))
     ImGui.TextColored(COLOR.DIM[1], COLOR.DIM[2], COLOR.DIM[3], COLOR.DIM[4],
-        string.format('mode: %s   members: %d   data age: %dms',
-            roster.mode, #roster.members, math.floor(age * 1000)))
+        string.format('mode: %s   members: %d', roster.mode, #roster.members))
 end
 
 -- ---------------------------------------------------------------------------
@@ -276,22 +274,7 @@ local function drawInner()
     end
 end
 
--- Heartbeat debug: print a line every ~2 seconds so we can confirm in chat
--- whether the imgui callback is being invoked. Removed when we're past
--- the shake-out period.
-local _drawCount = 0
-
 function M.draw()
-    _drawCount = _drawCount + 1
-    if _drawCount % 120 == 1 then
-        -- ~once every 2 seconds at 60fps; safe sentinel so we know the
-        -- callback is alive. Comment this out when no longer needed.
-        pcall(function()
-            print(string.format('\at[\ayAggroMeter dbg\at]\ax draw #%d  _visible=%s',
-                _drawCount, tostring(_visible)))
-        end)
-    end
-
     if not _visible then return end
 
     -- Honor a pending /agm reset by forcing window back to a known
