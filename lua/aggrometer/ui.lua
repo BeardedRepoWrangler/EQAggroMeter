@@ -504,10 +504,6 @@ local function drawInner()
     else
         drawHeader(roster)
         ImGui.Separator()
-        drawFilters()
-        ImGui.Separator()
-        drawBars(roster)         -- player main bars at top (overview)
-        ImGui.Separator()
         drawMobs(roster)         -- stable mob-slot view (XTarget-style)
         drawFooter(roster)
     end
