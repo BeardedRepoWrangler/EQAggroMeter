@@ -28,6 +28,14 @@ EQAggroMeter is an aggro meter for EverQuest — a real-time threat tracker that
 
 8. **Always stage with `git add -A`, never list files individually.** Listing files leaves new ones (logs, ADRs, scaffolds) untracked. After staging, run `git status` and `git diff --cached --stat` so the set can be eyeballed; anything that shouldn't ship can be removed with `git restore --staged <file>`.
 
+9. **Project hygiene is maintained alongside code changes, not as a separate task.** Whenever a meaningful change ships:
+   - If it introduces or alters a non-trivial design decision → write or update an ADR
+   - If it changes the wire protocol, file format, or external interface → update [[design/wire-protocol]] (or the relevant design doc)
+   - If it changes what's in the repo or how it's installed → update [[README]] and any affected runbooks
+   - If it makes existing code dead → delete the dead code in the same change, don't leave commented-out remnants
+   - If it adds a new module or top-level note → link from [[Index]]
+   The bar is "future-Claude or a new contributor shows up cold and can understand the current state by reading the docs." Never punt hygiene to "later."
+
 ## Deploy environment
 
 _TBD — fill in once a host is chosen._

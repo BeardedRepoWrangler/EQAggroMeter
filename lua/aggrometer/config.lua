@@ -49,26 +49,20 @@ local DEFAULTS = {
         raid  = 200,
     },
     -- Inter-character sharing via EQ group/raid chat.
+    -- See decisions/0003-group-chat-transport.md and design/wire-protocol.md.
+    --
+    -- Event-driven publish:
+    --   * publish immediately when held-mobs set or pet target changes,
+    --     rate-limited to once per changeMinIntervalMs
+    --   * always publish at least every keepaliveMs as sanity refresh
+    --   * remoteStaleMs = how long to keep a peer's data after their
+    --     last message; should be > keepaliveMs * 2 to allow one miss
     share = {
-        enabled              = false,  -- master toggle, off until /agm share on
-        trust                = false,  -- legacy (channel-transport era)
-        -- Event-driven publish:
-        --   * publish immediately when our held-mobs set or pet target
-        --     changes, but no more often than changeMinIntervalMs apart
-        --   * also send a keepalive at most every keepaliveMs in case
-        --     events were missed (e.g. chat throttled briefly)
+        enabled              = false,
         changeMinIntervalMs  = 1000,
         keepaliveMs          = 15000,
-        publishMs            = 2000,   -- legacy field, ignored
-        groupTTLDays         = 30,     -- legacy (channel-transport era)
-        raidTTLDays          = 1,      -- legacy
-        remoteStaleMs        = 30000,  -- bumped: with keepalive at 15s, allow 2 misses before dropping peer
+        remoteStaleMs        = 30000,
     },
-    -- Per-leader-name remembered channels. Populated/managed by share.lua.
-    -- Schema per entry:
-    --   { suffix = "3F7Q9", kind = "group"|"raid", lastSeen = <unix-ts>,
-    --     autoJoin = true|false }
-    channels = {},
     -- Auto-cleanup of stale XTarget slots. Slots where Spawn(mobId) no
     -- longer resolves are reset via /xtarget remove <slot> after the
     -- staleness has persisted past the threshold (avoids resetting on

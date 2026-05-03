@@ -1,25 +1,16 @@
 -- aggrometer/share.lua
 --
 -- Inter-character XTarget sharing via EQ group chat (/g) or raid chat (/rs).
+-- See decisions/0003-group-chat-transport.md for why this transport rather
+-- than EQ custom channels (/join), NetBots, or EQBC.
+-- See design/wire-protocol.md for the AGM:/AGMP: wire format.
 --
--- Originally designed to use EQ's custom chat channels (/join), but
--- Ascendant's Universal Chat service is unreliable / unavailable, so the
--- transport was switched to group/raid chat. Same wire format, just
--- routed through a different chat command. Auto-scoped to your group/raid
--- — no channel names, no /join, no announce/accept dance.
+-- Cadence is event-driven: publish on holder transitions, mob add/remove,
+-- or pet swing-target change (rate-limited to once per share.changeMinIntervalMs)
+-- plus a periodic keepalive every share.keepaliveMs as sanity refresh.
 --
--- Wire format:
---   AGM:<charName>:<mobId>@<pct>,<mobId>@<pct>,...
---
--- Trade-off: AGM-prefixed lines are visible in your group chat. Filter
--- them to a separate window via EQ's chat options if it bothers you.
---
--- Limitations:
---   * Chat latency (~0.5–2s).
---   * Both peers must run the script.
---   * Only works while in an EQ group/raid (the group IS the scope).
---   * /lua stop kills the script abruptly; nothing to clean up since
---     we don't /join anything.
+-- Trade-off: AGM-prefixed lines are visible in your group/raid chat. Filter
+-- them to a hidden chat tab via EQ chat options if it bothers you.
 
 local mq     = require('mq')
 local config = require('aggrometer.config')
@@ -36,7 +27,6 @@ local function tlo(fn, default)
 end
 
 local function nowMs() return os.clock() * 1000 end
-local function nowSec() return os.time() end
 
 local function chat(msg)
     pcall(function() mq.cmd('/echo \at[\ayAggroMeter\at]\ax ' .. msg) end)
@@ -46,138 +36,34 @@ local function chatf(fmt, ...)
     chat(string.format(fmt, ...))
 end
 
-local CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  -- omits ambiguous 0/O/1/I
-local function randSuffix(len)
-    len = len or 5
-    local s = ''
-    for _ = 1, len do
-        local idx = math.random(1, #CHARS)
-        s = s .. CHARS:sub(idx, idx)
-    end
-    return s
-end
-
-local function truncate(s, n)
-    if not s then return '' end
-    if #s <= n then return s end
-    return s:sub(1, n)
-end
-
-local function buildChannelName(leaderName, suffix)
-    -- agm- (4) + truncated leader (≤8) + - (1) + suffix (5) = ≤18 chars
-    return string.format('agm-%s-%s', truncate(leaderName, 8), suffix)
-end
-
 -- ---------------------------------------------------------------------------
 -- internal state
 
 local _initialized      = false
 local _myCharName       = '?'
-local _activeChannel    = nil      -- string, current channel name
-local _activeKind       = nil      -- 'group' | 'raid'
-local _activeLeader     = nil      -- leader name keyed in config.channels
 local _lastPublishMs    = 0
-local _pendingInvite    = nil      -- { sender, channel, at }
 
 -- Event-driven publish state. Compared each tick against current state to
 -- decide whether to publish immediately (vs waiting for keepalive).
-local _xtargetSnapshot  = {}       -- { mobId = pct } from last publish
-local _lastPetTargetId  = 0        -- pet's swing target from last publish
+local _xtargetSnapshot  = {}    -- { mobId = pct } from last publish
+local _lastPetTargetId  = 0     -- pet's swing target from last publish
 
--- Remote XTarget data received from other characters on the channel.
--- Schema: _remote[charName] = {
---   mobs    = { [mobId] = { name=str, pct=int, lastSeen=ms } },
---   updated = ms,
--- }
-local _remote = {}
+-- Verbose chat-tap toggle for debugging. When true, every fired hook
+-- logs to chat so we can see whether our event patterns are matching.
+-- Toggle with /agm share tap on/off.
+local _chatTap          = false
 
--- ---------------------------------------------------------------------------
--- channel registry (config-backed)
-
-local function loadChannel(leaderName)
-    local entry = config.get('channels.' .. leaderName)
-    return entry  -- may be nil
-end
-
-local function saveChannel(leaderName, suffix, kind)
-    config.set('channels.' .. leaderName .. '.suffix',   suffix)
-    config.set('channels.' .. leaderName .. '.kind',     kind)
-    config.set('channels.' .. leaderName .. '.lastSeen', nowSec())
-    config.set('channels.' .. leaderName .. '.autoJoin', true)
-end
-
-local function touchChannel(leaderName)
-    if not leaderName then return end
-    local e = loadChannel(leaderName)
-    if e then
-        config.set('channels.' .. leaderName .. '.lastSeen', nowSec())
-    end
-end
-
--- TTL prune: drop entries older than the per-kind TTL.
-local function pruneChannels()
-    local channels = config.get('channels') or {}
-    local groupTTL = (config.get('share.groupTTLDays') or 30) * 86400
-    local raidTTL  = (config.get('share.raidTTLDays')  or 1)  * 86400
-    local now = nowSec()
-    local pruned = 0
-    for leader, entry in pairs(channels) do
-        if type(entry) == 'table' and entry.lastSeen then
-            local ttl = (entry.kind == 'raid') and raidTTL or groupTTL
-            if (now - entry.lastSeen) > ttl then
-                config.set('channels.' .. leader, nil)
-                pruned = pruned + 1
-            end
-        end
-    end
-    return pruned
-end
+-- Remote XTarget data received from peers. Schema:
+--   _remote[charName] = { mobs = { [mobId] = {pct, lastSeen} }, updated }
+local _remote           = {}
 
 -- ---------------------------------------------------------------------------
--- group/raid leader detection
+-- transport
 
-local function detectLeader()
-    -- Returns (leaderName, kind) for the current group/raid context, or
-    -- (nil, nil) when solo or no detectable leader.
-    local raidMembers = tlo(function() return mq.TLO.Raid.Members() end, 0)
-    if raidMembers > 0 then
-        local n = tlo(function() return mq.TLO.Raid.Leader.Name() end, nil)
-        if n and n ~= '' then return n, 'raid' end
-    end
-    local groupMembers = tlo(function() return mq.TLO.Group.Members() end, 0)
-    if groupMembers > 0 then
-        local n = tlo(function() return mq.TLO.Group.Leader.Name() end, nil)
-        if n and n ~= '' then return n, 'group' end
-    end
-    return nil, nil
-end
-
--- ---------------------------------------------------------------------------
--- EQ channel ops
-
-local function findChannelSlot(channelName)
-    -- EQ stores joined channels in slots 1..N. We need the slot to send
-    -- via /<slot> message reliably (the channel-name-as-command path is
-    -- fragile when names contain dashes).
-    local count = tlo(function() return mq.TLO.EverQuest.ChatChannels() end, 0)
-    for i = 1, count do
-        local name = tlo(function() return mq.TLO.EverQuest.ChatChannel(i)() end, nil)
-        if name and name:lower() == channelName:lower() then
-            return i
-        end
-    end
-    return nil
-end
-
--- /join and /leave are no-ops in the group-chat transport — there's no
--- channel to manage. Kept as functions so existing call sites compile.
-local function joinEQChannel(_) end
-local function leaveEQChannel(_) end
-
--- Send via group chat or raid chat depending on current mode. The
--- channelName argument is ignored — kept for API compatibility with
--- code that was written for the old custom-channel transport.
-local function sendToChannel(_channelName, message)
+-- Send via group or raid chat depending on current context. Returns false
+-- (silently) when solo so callers don't need to special-case it — share
+-- can be left enabled across solo↔group transitions safely.
+local function sendToChannel(message)
     local raidMembers = tlo(function() return mq.TLO.Raid.Members() end, 0)
     if raidMembers > 0 then
         pcall(function() mq.cmd('/rs ' .. message) end)
@@ -188,17 +74,15 @@ local function sendToChannel(_channelName, message)
         pcall(function() mq.cmd('/g ' .. message) end)
         return true
     end
-    return false  -- not in a group/raid, nowhere to send
+    return false
 end
 
 -- ---------------------------------------------------------------------------
 -- publish
 
--- Reads Me.XTarget directly rather than going through data.lua's roster.
--- This is deliberate: data.lua merges remote data INTO the roster for UI
--- display, so if we published from there we'd echo back other characters'
--- data on the channel. Reading from Me.XTarget keeps publish strictly to
--- our own perspective.
+-- Reads Me.XTarget directly rather than through data.lua's roster so we
+-- never echo back data we received from peers. Same corpse + stale-spawn
+-- filters as data.lua's local iteration.
 local function buildPublishPayloadFromMe()
     local parts = {}
     local seen = {}
@@ -207,8 +91,6 @@ local function buildPublishPayloadFromMe()
         local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
         if mobId > 0 and not seen[mobId] then
             seen[mobId] = true
-            -- Skip corpses + stale slots (Spawn no longer resolves) — same
-            -- filter as data.lua's local xtarget iteration.
             local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
             local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
             if mobName and mobName ~= '' and mobType ~= 'Corpse' then
@@ -223,11 +105,11 @@ local function buildPublishPayloadFromMe()
     return string.format('AGM:%s:%s', _myCharName, table.concat(parts, ','))
 end
 
--- AGMP: publishes the pet's swing target as a separate broadcast,
--- attributed to the pet by name. Receivers parse it and credit the pet
--- with 100% aggro on that mob. Covers the high-confidence case (pet
--- actively swinging); broader pet-holding cases rely on receive-side
--- inference in data.lua.
+-- AGMP: publishes the pet's swing target attributed to the pet by name.
+-- Receivers credit the pet with 100% aggro on that mob — high-confidence
+-- signal that the pet is the actual holder. Broader pet-holding cases
+-- (pet has aggro on multiple mobs but only swinging at one) rely on
+-- receive-side inference in data.lua.
 local function buildPetPublishPayload()
     local petId = tlo(function() return mq.TLO.Me.Pet.ID() end, 0)
     if petId <= 0 then return nil end
@@ -235,34 +117,30 @@ local function buildPetPublishPayload()
     if not petName or petName == '' then return nil end
     local petTargetId = tlo(function() return mq.TLO.Me.Pet.Target.ID() end, 0)
     if petTargetId <= 0 then return nil end
-    -- Verify the target spawn still exists (not despawned/corpse)
     local mobName = tlo(function() return mq.TLO.Spawn(petTargetId).CleanName() end, nil)
     local mobType = tlo(function() return mq.TLO.Spawn(petTargetId).Type() end, '')
     if not mobName or mobName == '' or mobType == 'Corpse' then return nil end
     return string.format('AGMP:%s:%d@100', petName, petTargetId)
 end
 
--- Publish a snapshot of self + pet aggro. Sends two messages (player +
--- pet) when both are non-empty. Caller (M.tick) is responsible for
--- timing decisions; this function does the actual chat send.
+-- Publish a snapshot of self + pet aggro. Caller (M.tick) decides timing;
+-- this just sends. _lastPublishMs is updated regardless of whether the
+-- send actually succeeded (solo = no-op = still resets the keepalive timer).
 function M.publish()
     if not config.get('share.enabled') then return end
 
     local payload = buildPublishPayloadFromMe()
-    if payload then
-        sendToChannel(nil, payload)
-    end
+    if payload then sendToChannel(payload) end
 
     local petPayload = buildPetPublishPayload()
-    if petPayload then
-        sendToChannel(nil, petPayload)
-    end
+    if petPayload then sendToChannel(petPayload) end
 
     _lastPublishMs = nowMs()
 end
 
--- Sample current XTarget into a {mobId -> pct} table for change detection.
--- Same filters as buildPublishPayloadFromMe (skip corpses + stale spawns).
+-- ---------------------------------------------------------------------------
+-- event detection
+
 local function sampleXTargetSnapshot()
     local snap = {}
     local seen = {}
@@ -282,7 +160,7 @@ local function sampleXTargetSnapshot()
 end
 
 -- True when the snapshot's "interesting" state differs from prev:
---   * mobs added/removed
+--   * mob added or removed
 --   * holder transition (a pct crossed the 100% threshold either way)
 -- Fine-grained pct fluctuations don't trigger; those wait for keepalive.
 local function snapshotChanged(prev, curr)
@@ -292,9 +170,7 @@ local function snapshotChanged(prev, curr)
     for mobId, pct in pairs(curr) do
         local oldPct = prev[mobId]
         if oldPct == nil then return true end
-        local wasHolder = oldPct >= 100
-        local isHolder  = pct >= 100
-        if wasHolder ~= isHolder then return true end
+        if (oldPct >= 100) ~= (pct >= 100) then return true end
     end
     return false
 end
@@ -306,7 +182,7 @@ local function currentPetTargetId()
 end
 
 -- ---------------------------------------------------------------------------
--- receive (chat event)
+-- receive
 
 local function handleAGMData(sender, body)
     -- body looks like: charName:mobId@pct,mobId@pct,...
@@ -327,41 +203,21 @@ local function handleAGMData(sender, body)
     _remote[charName] = { mobs = mobs, updated = nowMs() }
 end
 
-local function handleAGMInvite(sender, channelName)
-    if not channelName or channelName == '' then return end
-    if channelName == _activeChannel then return end  -- already in it
-    _pendingInvite = { sender = sender, channel = channelName, at = nowMs() }
-    chatf('Invite from %s: join channel \ay%s\ax? Type \ay/agm accept\ax',
-        tostring(sender), channelName)
-
-    -- Auto-accept if trust is on and we're in a group with the sender
-    if config.get('share.trust') then
-        chatf('(trust=on) auto-accepting invite from %s', sender)
-        M.acceptInvite()
-    end
-end
-
--- Verbose chat-tap toggle for debugging. When true, every fired hook
--- logs to chat so we can see whether our event patterns are matching.
--- Toggle with /agm share tap on/off.
-local _chatTap = false
-
--- Shared dispatch — works regardless of chat format the message arrived in.
+-- Shared dispatch — works regardless of which chat format the message
+-- arrived in. Tap logging happens before the self-echo filter so debug
+-- output shows everything we received.
 local function dispatchAGM(sender, msg, source)
     if _chatTap then
         chatf('TAP[%s]: sender=%s msg=%s', tostring(source),
             tostring(sender), tostring(msg))
     end
     if not msg or not sender then return end
-    if sender == _myCharName then return end  -- ignore own echo
-    if msg:sub(1, 11) == 'AGM-INVITE:' then
-        handleAGMInvite(sender, msg:sub(12))
-    elseif msg:sub(1, 16) == 'AGM-DEBUG-PING:' then
+    if sender == _myCharName then return end
+    if msg:sub(1, 16) == 'AGM-DEBUG-PING:' then
         chatf('received debug ping from %s: %s', sender, msg)
     elseif msg:sub(1, 5) == 'AGMP:' then
-        -- Pet aggro broadcast. Format: AGMP:<petName>:<mobId>@<pct>,...
-        -- Stored in _remote keyed by pet name; data.lua's attribution
-        -- treats it like any other peer's data.
+        -- Pet aggro broadcast; key by pet name. Receiver's data.lua
+        -- attribution finds the pet in its local roster.
         handleAGMData(sender, msg:sub(6))
     elseif msg:sub(1, 4) == 'AGM:' then
         handleAGMData(sender, msg:sub(5))
@@ -380,29 +236,15 @@ local function onTellChat(line, sender, msg)
     dispatchAGM(sender, msg, 'tell')
 end
 
-function M.setTap(enabled)
-    _chatTap = enabled and true or false
-    chatf('chat tap: %s', _chatTap and 'on' or 'off')
-end
-
 -- ---------------------------------------------------------------------------
 -- public API
 
 function M.init(charName)
     _myCharName = charName or '?'
-    math.randomseed(os.time() + (mq.TLO.Me.ID() or 0))
-    -- Cleanup old entries
-    local pruned = pruneChannels()
-    if pruned > 0 then
-        chatf('pruned %d stale channel(s) from config', pruned)
-    end
-    -- Register chat event hooks for the four formats AGM messages might
-    -- arrive in. EQ's chat format varies by chat type:
-    --   * channel chat (the AGM: data flow path)
-    --   * group chat (where /agm announce sends AGM-INVITE in a group)
-    --   * raid chat (same, but for raids)
-    --   * /tell (so the recipient gets prompted even without /g working,
-    --     useful when peers aren't yet in the same EQ group)
+    -- Register chat event hooks for the four chat formats AGM messages
+    -- might arrive in. Group/raid is the active transport; channel and
+    -- tell are kept registered as fallback paths in case the user manually
+    -- routes the wire format differently.
     pcall(function()
         mq.event('agm_channel', "#1# tells #2#:#3#, '#4#'",  onChannelChat)
         mq.event('agm_group',   "#1# tells the group, '#2#'", onGroupOrRaidChat)
@@ -424,28 +266,21 @@ function M.tick()
 
     if not config.get('share.enabled') then return end
 
-    -- Event-driven publish. Compare current state to last published.
-    -- Publish if:
-    --   (a) something interesting changed AND we haven't published in
-    --       changeMinIntervalMs (rate limit), OR
-    --   (b) keepaliveMs has elapsed since last publish (sanity refresh).
+    -- Event-driven publish:
+    --   (a) interesting change AND not within rate limit → publish
+    --   (b) keepalive interval elapsed → publish
     local now           = nowMs()
     local sinceLast     = now - _lastPublishMs
     local changeMin     = config.get('share.changeMinIntervalMs') or 1000
     local keepalive     = config.get('share.keepaliveMs') or 15000
-
     local currentSnap   = sampleXTargetSnapshot()
     local currentPetTgt = currentPetTargetId()
-
-    local changed = snapshotChanged(_xtargetSnapshot, currentSnap) or
-                    (currentPetTgt ~= _lastPetTargetId)
+    local changed       = snapshotChanged(_xtargetSnapshot, currentSnap) or
+                          (currentPetTgt ~= _lastPetTargetId)
 
     local shouldPublish = false
-    if changed and sinceLast >= changeMin then
-        shouldPublish = true
-    elseif sinceLast >= keepalive then
-        shouldPublish = true
-    end
+    if changed and sinceLast >= changeMin then shouldPublish = true
+    elseif sinceLast >= keepalive then shouldPublish = true end
 
     if shouldPublish then
         M.publish()
@@ -455,31 +290,24 @@ function M.tick()
 end
 
 -- /agm share on
--- Enables sharing regardless of current group/raid state. When solo
--- (or otherwise without a transport), broadcasts silently no-op —
--- sendToChannel returns false with no group/raid, no chat traffic
--- generated. Auto-engages the moment you're in a group or raid.
---
--- Safe to bake into a social button: one press, fire-and-forget.
+-- Enables sharing regardless of solo/group state. Solo broadcasts silently
+-- no-op (sendToChannel returns false with no group/raid). Auto-engages the
+-- moment you join a group/raid. Safe to bake into a social button.
 function M.start()
     config.set('share.enabled', true)
-    local leader, kind = detectLeader()
-    if leader then
-        _activeLeader = leader
-        _activeKind   = kind
-        chatf('share on. transport: %s chat. each peer running the script auto-publishes.',
-            kind == 'raid' and 'raid' or 'group')
+    local raid = tlo(function() return mq.TLO.Raid.Members() end, 0)
+    local grp  = tlo(function() return mq.TLO.Group.Members() end, 0)
+    if raid > 0 then
+        chat('share on. transport: raid chat. each peer running the script auto-publishes.')
+    elseif grp > 0 then
+        chat('share on. transport: group chat. each peer running the script auto-publishes.')
     else
-        _activeLeader = nil
-        _activeKind   = nil
         chat('share on. (solo right now — will auto-engage when you join a group or raid)')
     end
 end
 
 -- /agm share off
 function M.stop()
-    _activeLeader = nil
-    _activeKind   = nil
     config.set('share.enabled', false)
     chat('share off')
 end
@@ -487,13 +315,13 @@ end
 -- /agm share status
 function M.status()
     chatf('share enabled: %s', tostring(config.get('share.enabled')))
-    local mode = (tlo(function() return mq.TLO.Raid.Members() end, 0) > 0) and 'raid'
-              or (tlo(function() return mq.TLO.Group.Members() end, 0) > 0) and 'group'
-              or 'solo'
+    local raid = tlo(function() return mq.TLO.Raid.Members() end, 0)
+    local grp  = tlo(function() return mq.TLO.Group.Members() end, 0)
+    local mode = (raid > 0) and 'raid' or (grp > 0) and 'group' or 'solo'
     chatf('  current mode: %s   (broadcasts go to %s chat)',
         mode, (mode == 'raid') and 'raid' or (mode == 'group') and 'group' or '(none — nothing broadcast)')
     local count = 0
-    for k, _ in pairs(_remote) do count = count + 1 end
+    for _ in pairs(_remote) do count = count + 1 end
     chatf('  remote peers heard from: %d', count)
     for charName, data in pairs(_remote) do
         local n = 0
@@ -502,78 +330,14 @@ function M.status()
     end
 end
 
--- /agm announce — kept for backward compat; explains it's not needed.
-function M.announce()
-    chat('group-chat transport doesn\'t need announce — every peer running the script auto-publishes to /g.')
-    chat('just have your buddy run /agm share on. you\'ll see his AGM: lines in group chat once he does.')
+-- /agm share tap on|off — verbose chat-event log for troubleshooting
+function M.setTap(enabled)
+    _chatTap = enabled and true or false
+    chatf('chat tap: %s', _chatTap and 'on' or 'off')
 end
-
--- /agm accept — kept for backward compat; explains it's not needed.
-function M.acceptInvite(_channelOverride)
-    chat('group-chat transport doesn\'t use invites. just run /agm share on while in your group/raid.')
-end
-
--- /agm trust on/off
-function M.setTrust(enabled)
-    config.set('share.trust', enabled and true or false)
-    chatf('trust = %s  (auto-join group invites: %s)',
-        tostring(config.get('share.trust')),
-        config.get('share.trust') and 'on' or 'off')
-end
-
--- /agm channel list
-function M.listChannels()
-    local channels = config.get('channels') or {}
-    local now = nowSec()
-    local count = 0
-    chat('remembered channels:')
-    for leader, e in pairs(channels) do
-        if type(e) == 'table' and e.suffix then
-            local age = now - (e.lastSeen or 0)
-            local ageStr
-            if age < 3600 then     ageStr = string.format('%dm', math.floor(age / 60))
-            elseif age < 86400 then ageStr = string.format('%dh', math.floor(age / 3600))
-            else                   ageStr = string.format('%dd', math.floor(age / 86400))
-            end
-            chatf('  %-12s  agm-%s-%s  (%s, %s ago, autoJoin=%s)',
-                leader,
-                truncate(leader, 8), e.suffix,
-                e.kind or 'group', ageStr, tostring(e.autoJoin))
-            count = count + 1
-        end
-    end
-    if count == 0 then chat('  (none)') end
-end
-
--- /agm channel forget <leader>|all
-function M.forgetChannel(target)
-    if not target or target == '' then
-        chat('usage: /agm channel forget <leader>|all')
-        return
-    end
-    if target == 'all' then
-        config.set('channels', {})
-        chat('forgot all remembered channels')
-        return
-    end
-    if config.get('channels.' .. target) then
-        config.set('channels.' .. target, nil)
-        chatf('forgot channel for leader %s', target)
-    else
-        chatf('no remembered channel for leader %s', target)
-    end
-end
-
--- Read accessor for ui/data — returns the latest remote XTarget map.
--- Schema: { [charName] = { mobs = { [mobId] = {pct, lastSeen} }, updated } }
-function M.remoteData()
-    return _remote
-end
-
-function M.activeChannel() return _activeChannel end
 
 -- /agm share debug — diagnostic dump for troubleshooting why data isn't
--- flowing between peers. Run on BOTH ends, paste output to compare.
+-- flowing. Run on BOTH ends, paste output to compare.
 function M.debug()
     chat('--- share debug ---')
     chatf('me: %s   share.enabled: %s', _myCharName, tostring(config.get('share.enabled')))
@@ -584,23 +348,17 @@ function M.debug()
     chatf('mode: %s   group members: %d   raid members: %d', mode, grp, raid)
     chatf('transport: %s', (mode == 'raid') and '/rs' or (mode == 'group') and '/g' or '(none)')
 
-    -- Sample payload
     local payload = buildPublishPayloadFromMe()
-    if payload then
-        chatf('current sample payload: %s', payload)
-    else
-        chat('current sample payload: (empty — no XTargets to publish)')
-    end
+    if payload then chatf('current sample payload: %s', payload)
+    else chat('current sample payload: (empty — no XTargets to publish)') end
 
-    -- Send a test ping
     local testMsg = string.format('AGM-DEBUG-PING:%s:%d', _myCharName, math.floor(os.clock() * 1000))
-    local ok = sendToChannel(nil, testMsg)
+    local ok = sendToChannel(testMsg)
     chatf('sent test ping: %s   (peers should see it in their %s chat)',
         ok and 'ok' or 'FAILED (not in group/raid)',
         (mode == 'raid') and 'raid' or 'group')
     chatf('test message body was: %s', testMsg)
 
-    -- Remote peers
     local rcount = 0
     for _ in pairs(_remote) do rcount = rcount + 1 end
     chatf('remote peers tracked: %d', rcount)
@@ -611,5 +369,8 @@ function M.debug()
         chatf('  %s: %d mobs, last update %ds ago', charName, mn, age)
     end
 end
+
+-- Read accessor for ui/data.lua — returns the latest remote XTarget map.
+function M.remoteData() return _remote end
 
 return M

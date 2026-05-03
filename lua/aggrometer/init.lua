@@ -50,9 +50,9 @@ local function printHelp()
     chat('  mode     - print the currently detected mode (solo/group/raid)')
     chat('  help     - this help text')
     chat('share commands (cross-character XTarget visibility via group/raid chat):')
-    chat('  share on|off|status|debug  - toggle XTarget broadcasting to group/raid chat')
-    chat('  trust on|off               - (legacy; not used in group-chat transport)')
-    chat('  channel list/forget        - (legacy; not used in group-chat transport)')
+    chat('  share on|off|status        - toggle XTarget broadcasting to group/raid chat')
+    chat('  share debug                - diagnostic dump for share troubleshooting')
+    chat('  share tap on|off           - verbose chat-event log (debug)')
     chat('bar UX: left-click to /target, right-click for context menu (Target/Assist).')
     chat('sub-bars (under your own bar) show per-mob aggro from your XTarget list.')
     chat('  ↳ prefix = child bar.   * suffix = your current target.')
@@ -185,29 +185,6 @@ local function commandHandler(...)
             end
         else
             chatf('usage: /agm share on|off|status|debug|tap   (got "%s")', arg)
-        end
-    elseif sub == 'announce' then
-        share.announce()
-    elseif sub == 'accept' then
-        share.acceptInvite(args[2])
-    elseif sub == 'trust' then
-        local arg = (args[2] or ''):lower()
-        if arg == 'on' or arg == 'true' or arg == '1' then
-            share.setTrust(true)
-        elseif arg == 'off' or arg == 'false' or arg == '0' then
-            share.setTrust(false)
-        else
-            chatf('usage: /agm trust on|off   (current: %s)',
-                tostring(config.get('share.trust')))
-        end
-    elseif sub == 'channel' then
-        local arg = (args[2] or ''):lower()
-        if arg == 'list' then
-            share.listChannels()
-        elseif arg == 'forget' then
-            share.forgetChannel(args[3])
-        else
-            chat('usage: /agm channel list   OR   /agm channel forget <leader>|all')
         end
     elseif sub == 'xtreset' then
         local n = data.resetStaleXTargetsNow()
