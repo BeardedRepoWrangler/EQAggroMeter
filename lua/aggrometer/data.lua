@@ -290,25 +290,61 @@ local function buildXTargetsByHolder(target, members, remoteData)
             -- Priority 1: known holder of current target.
             holderId = currentTargetHolderId
         else
-            -- Priority 2 (heuristic): character with highest pct is most-
-            -- likely holder. Tie at 100 = whoever wins iteration order.
-            local maxPct, maxChar = -1, nil
-            for char, pct in pairs(info.pcts) do
-                if pct > maxPct then
-                    maxPct = pct
-                    maxChar = char
+            -- Priority 2 (heuristic). Pick most-likely holder from pcts.
+            --
+            -- Tiebreaker ordering (top wins):
+            --   a. A pet at >= 100% pct whose owner is a non-tank class.
+            --      Necro/Mage/BST/Enc pets tanking is the typical case
+            --      and AGMP's synthetic 100% accurately reflects it.
+            --      Tank-class (WAR/PAL/SHD) owners are excluded because
+            --      *their* pets at 100% via AGMP just means "auto-
+            --      attacking the same mob the tank is holding," not
+            --      that the pet is the actual holder.
+            --   b. The character with the highest pct. Tied 100s among
+            --      non-pet candidates resolve by iteration order — the
+            --      pet preference in (a) deliberately runs first to
+            --      prevent a peer player at 100% (DOT-management /
+            --      threshold-holding) from winning the tie over their
+            --      own tanking pet.
+            --   c. If max pct < 100 (mob unclaimed), MT fallback.
+            --   d. Self as final safety net.
+            local TANK_CLASSES = { WAR = true, PAL = true, SHD = true }
+            local petCandidate
+            for _, mem in ipairs(members) do
+                if mem.isPet and (info.pcts[mem.name] or 0) >= 100 then
+                    local owner
+                    for _, o in ipairs(members) do
+                        if o.spawnId == mem.ownerSpawnId then
+                            owner = o
+                            break
+                        end
+                    end
+                    if owner and not TANK_CLASSES[owner.class or ''] then
+                        petCandidate = mem.spawnId
+                        break
+                    end
                 end
             end
-            if maxChar then
-                holderId = nameToSpawn[maxChar] or 0
-            end
-            -- If max pct < 100, no one has truly "claimed" the mob —
-            -- attribute to MT as the expected tank.
-            if (not maxPct or maxPct < 100) and mtSpawnId > 0 then
-                holderId = mtSpawnId
-            end
-            if not holderId or holderId == 0 then
-                holderId = mySpawnId
+
+            if petCandidate then
+                holderId = petCandidate
+            else
+                local maxPct, maxChar = -1, nil
+                for char, pct in pairs(info.pcts) do
+                    if pct > maxPct then
+                        maxPct = pct
+                        maxChar = char
+                    end
+                end
+                if maxChar then
+                    holderId = nameToSpawn[maxChar] or 0
+                end
+                if (not maxPct or maxPct < 100) and mtSpawnId > 0 then
+                    holderId = mtSpawnId
+                end
+                if not holderId or holderId == 0 then
+                    holderId = mySpawnId
+                end
             end
         end
 

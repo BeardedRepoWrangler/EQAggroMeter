@@ -87,7 +87,11 @@ Priority order (first match wins):
 -1. **Real-time hit signal (self or peer).** If `combat.recentAttackerCharOf(mob)` returns a character name — either self (from local `mq.event` hits) or any peer (from received `AGMH:` broadcasts) — attribute to that character via the roster name→spawn lookup. When self and a peer both claim recent attribution, most-recent timestamp wins (only one character can be the holder at a time; freshest signal is closest to ground truth). This signal comes from real-time chat events, not TLO refresh, so it leads everything below.
 0. **Local 100%.** If `info.pcts[me] >= 100` for a mob, attribute to me. `Me.XTarget(slot).PctAggro == 100` is the ground-truth holder signal in TLO-space. Lags by one MQ refresh compared to combat events but works when no combat event has fired yet (initial pull, mob between swings, AGMH still in flight).
 1. **AggroHolder for current target.** When neither (-1) nor (0) fires, `mq.TLO.Target.AggroHolder.ID` is reliable for the current target only. There is no AggroHolder TLO for non-current xtarget mobs.
-2. **Heuristic.** Pick the character with the highest known pct across local + peer XTarget data. If max pct < 100 (mob unclaimed), fall back to MT (the "expected tank"). Final fallback to self.
+2. **Heuristic.** Tiebreaker order (top wins):
+   - **Pet preference for non-tank-class owners.** A pet at >= 100% pct (via AGMP receive or pet inference) whose owner is non-tank-class wins. Necro/Mage/BST/Enc pets tanking is the typical case and AGMP's synthetic 100% reflects it accurately. Tank-class (WAR/PAL/SHD) owners are excluded because *their* pet at 100% via AGMP just means "auto-attacking the same mob the tank is holding," not that the pet is the actual holder. See [[../decisions/0007-pet-preference-in-heuristic|ADR 0007]] for the bug that motivated this.
+   - **Highest pct character** across local + peer XTarget data.
+   - If max pct < 100 (mob unclaimed), fall back to MT (the "expected tank").
+   - Final fallback to self.
 
 Pet inference runs *before* the priority chain: when no character is at 100 on a mob and any character with non-zero aggro has a pet in the roster, that pet gets promoted to 100% in the pcts table. This is the only way to detect a peer's pet holding a mob (the wire protocol carries player pct only) and is also the only signal we have for self's pet tanking in solo necro/mage when self isn't pegged at 100%.
 

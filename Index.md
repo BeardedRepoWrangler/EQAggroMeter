@@ -26,6 +26,7 @@ ADR log lives in `decisions/`. See [[decisions/README|the decisions README]] for
 - [[decisions/0004-holder-attribution-trusts-local-100pct|ADR 0004 — Holder attribution trusts local XTarget == 100 over Target.AggroHolder]]
 - [[decisions/0005-combat-event-detection|ADR 0005 — Combat events drive holder attribution at the highest priority]]
 - [[decisions/0006-combat-event-broadcast|ADR 0006 — AGMH wire protocol broadcasts combat-event holder signals to peers]]
+- [[decisions/0007-pet-preference-in-heuristic|ADR 0007 — Heuristic prefers non-tank-class pets at 100% over peer players at 100%]]
 
 ## Design
 
