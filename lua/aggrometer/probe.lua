@@ -199,12 +199,29 @@ local function probeXTarget()
     hr('XTarget aggro (sanity check — known-good per-target aggro)')
     local slots = mq.TLO.Me.XTargetSlots() or 0
     printf('XTargetSlots = %d', slots)
+    local mySpawnId = mq.TLO.Me.ID() or 0
     for i = 1, math.min(slots, 13) do
         local id   = safe(function() return mq.TLO.Me.XTarget(i).ID() end)
         local name = safe(function() return mq.TLO.Me.XTarget(i).CleanName() end)
         local pct  = safe(function() return mq.TLO.Me.XTarget(i).PctAggro() end)
         if type(id) == 'number' and id > 0 then
             printf('  XTarget[%d] %-20s id=%s PctAggro=%s', i, tostring(name), tostring(id), tostring(pct))
+        end
+    end
+    -- Spawn[id].Target probe — does this build expose per-spawn target?
+    -- If Spawn.Target.ID() returns my spawn id for an xtarget mob, that
+    -- mob is currently "fighting me" and is a hint that I hold its
+    -- aggro. Compared against AggroHolder/PctAggro to assess lag/lead.
+    -- See ADR 0005.
+    hr('Spawn[id].Target.ID probe (per-mob who-is-it-fighting test)')
+    printf('Me.ID (for comparison) = %s', tostring(mySpawnId))
+    for i = 1, math.min(slots, 13) do
+        local id = safe(function() return mq.TLO.Me.XTarget(i).ID() end)
+        if type(id) == 'number' and id > 0 then
+            local name     = safe(function() return mq.TLO.Spawn(id).CleanName() end)
+            local sTgtId   = safe(function() return mq.TLO.Spawn(id).Target.ID() end)
+            local sTgtName = safe(function() return mq.TLO.Spawn(id).Target.CleanName() end)
+            printf('  Spawn[%d] %-20s Target.ID=%s Target.CleanName=%s', id, tostring(name), tostring(sTgtId), tostring(sTgtName))
         end
     end
 end

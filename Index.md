@@ -24,6 +24,7 @@ ADR log lives in `decisions/`. See [[decisions/README|the decisions README]] for
 - [[decisions/0002-tlo-surface|ADR 0002 — TLO surface and the raid-mode coverage constraint]]
 - [[decisions/0003-group-chat-transport|ADR 0003 — Inter-character XTarget sharing rides EQ group/raid chat]]
 - [[decisions/0004-holder-attribution-trusts-local-100pct|ADR 0004 — Holder attribution trusts local XTarget == 100 over Target.AggroHolder]]
+- [[decisions/0005-combat-event-detection|ADR 0005 — Combat events drive holder attribution at the highest priority]]
 
 ## Design
 

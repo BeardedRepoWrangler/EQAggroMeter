@@ -20,6 +20,7 @@ local data   = require('aggrometer.data')
 local ui     = require('aggrometer.ui')
 local config = require('aggrometer.config')
 local share  = require('aggrometer.share')
+local combat = require('aggrometer.combat')
 
 local TAG = '\at[\ayAggroMeter\at]\ax'
 
@@ -53,6 +54,10 @@ local function printHelp()
     chat('  share on|off|status        - toggle XTarget broadcasting to group/raid chat')
     chat('  share debug                - diagnostic dump for share troubleshooting')
     chat('  share tap on|off           - verbose chat-event log (debug)')
+    chat('combat commands (real-time hit detection — see ADR 0005):')
+    chat('  combat status              - show recent attackers + TTL')
+    chat('  combat tap on|off          - log every detected hit/miss event (debug)')
+    chat('  combat ttl <seconds>       - set how long an attacker stays "recent"')
     chat('bar UX: left-click to /target, right-click for context menu (Target/Assist).')
     chat('sub-bars (under your own bar) show per-mob aggro from your XTarget list.')
     chat('  ↳ prefix = child bar.   * suffix = your current target.')
@@ -189,6 +194,40 @@ local function commandHandler(...)
     elseif sub == 'xtreset' then
         local n = data.resetStaleXTargetsNow()
         chatf('immediate stale-XTarget reset: %d slot(s) cleared', n)
+    elseif sub == 'combat' then
+        local arg = (args[2] or 'status'):lower()
+        if arg == 'status' then
+            local snap = combat.snapshot()
+            local count = 0
+            for _ in pairs(snap) do count = count + 1 end
+            chatf('combat detection: ttl=%.1fs  tap=%s  recent attackers=%d',
+                combat.ttl(), tostring(combat.tap()), count)
+            for mobId, age in pairs(snap) do
+                local name = mq.TLO.Spawn(mobId).CleanName() or '?'
+                chatf('  mob %d (%s): %.1fs ago', mobId, tostring(name), age)
+            end
+        elseif arg == 'tap' then
+            local on = (args[3] or ''):lower()
+            if on == 'on' or on == 'true' or on == '1' then
+                combat.setTap(true)
+            elseif on == 'off' or on == 'false' or on == '0' then
+                combat.setTap(false)
+            else
+                combat.setTap(not combat.tap())
+            end
+            chatf('combat tap = %s', tostring(combat.tap()))
+        elseif arg == 'ttl' then
+            local n = tonumber(args[3] or '')
+            if n and n > 0 then
+                combat.setTtl(n)
+                config.set('combat.attackerTtlSec', n)
+                chatf('combat ttl = %.1fs', n)
+            else
+                chatf('usage: /agm combat ttl <seconds>   (current: %.1fs)', combat.ttl())
+            end
+        else
+            chatf('usage: /agm combat status|tap on|off|ttl <s>   (got "%s")', arg)
+        end
     elseif sub == 'help' or sub == '?' then
         printHelp()
     else
@@ -209,6 +248,7 @@ config.init(serverName, charName)
 ui.applyConfig()
 data.applyConfig()
 share.init(charName)
+combat.init()
 
 ui.setRosterProvider(data.roster)
 

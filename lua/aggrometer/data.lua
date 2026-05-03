@@ -9,6 +9,7 @@ local mq     = require('mq')
 local roles  = require('aggrometer.roles')
 local config = require('aggrometer.config')
 local share  = require('aggrometer.share')
+local combat = require('aggrometer.combat')
 
 local M = {}
 
@@ -244,17 +245,21 @@ local function buildXTargetsByHolder(target, members, remoteData)
 
     -- Attribute each mob and build byHolder.
     --
-    -- Priority order (see ADR 0004):
-    --   0. info.pcts[me] >= 100 on this mob → I am the holder.
-    --      Local XTarget pct == 100 is the ground truth; Target.AggroHolder
-    --      lags through holder swaps and must NOT win when this signal
-    --      disagrees. (Was the bug behind solo-necro pet-shows-as-holder
-    --      while mobs were melee'ing me.)
-    --   1. Target.AggroHolder for the current target (when I'm not at
-    --      100% on it). Reliable for the current target only — there is
-    --      no AggroHolder data for non-current xtarget mobs.
-    --   2. Heuristic: character with highest known pct; if max pct < 100
-    --      fall back to MT (= "expected tank"); final fallback to self.
+    -- Priority order (see ADRs 0004 and 0005):
+    --   -1. combat.recentAttackerOf(mob) → me. A mob currently melee'ing
+    --      me is by definition treating me as #1 threat — definitional
+    --      holder evidence. This signal comes from real-time chat events,
+    --      not TLO refresh, so it leads everything below.
+    --    0. info.pcts[me] >= 100 on this mob → me. Local XTarget pct ==
+    --      100 says "I'm the holder" by ratio definition. Lags by one
+    --      MQ refresh cycle compared to combat events but works when
+    --      combat events haven't fired yet (initial pull, or mob is
+    --      between swings).
+    --    1. Target.AggroHolder for the current target. Reliable for the
+    --      current target only — no AggroHolder data for non-current
+    --      xtarget mobs.
+    --    2. Heuristic: character with highest known pct; if max pct < 100
+    --      fall back to MT; final fallback to self.
     --
     -- The previous "Priority 2: mob == Me.Pet.Target.ID → pet" rule was
     -- removed — the pet's auto-attack target is not a holder signal,
@@ -263,7 +268,10 @@ local function buildXTargetsByHolder(target, members, remoteData)
     for mobId, info in pairs(mobInfo) do
         local holderId
 
-        if (info.pcts[myCharName] or 0) >= 100 then
+        if combat.recentAttackerOf(mobId) then
+            -- Priority -1: this mob is hitting me right now → I hold it.
+            holderId = mySpawnId
+        elseif (info.pcts[myCharName] or 0) >= 100 then
             -- Priority 0: I'm at 100% = I am the holder.
             holderId = mySpawnId
         elseif mobId == currentTargetId and currentTargetHolderId > 0 then
@@ -352,6 +360,14 @@ local function buildGroupMember(n)
 end
 
 local function buildRoster()
+    -- Refresh combat.lua's name→spawnId index from the current XTarget
+    -- list before building the roster. Done here (rather than at event
+    -- time) because combat events fire dozens of times/sec in heavy
+    -- combat — keeping the per-event handler O(1) on a cached index.
+    -- Also gc'd here to drop entries past TTL.
+    combat.refreshXTargetIndex()
+    combat.gc()
+
     local members = { buildSelf() }
     local mode = detectMode()
 
@@ -555,6 +571,8 @@ function M.applyConfig()
     if type(r.group) == 'number' then _intervalMs.group = r.group end
     if type(r.solo)  == 'number' then _intervalMs.solo  = r.solo  end
     if type(r.raid)  == 'number' then _intervalMs.raid  = r.raid  end
+    -- Combat module pulls its own config (combat.attackerTtlSec).
+    combat.applyConfig(config)
 end
 
 return M

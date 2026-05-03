@@ -82,17 +82,18 @@ Stale entries: peer data older than `share.remoteStaleMs` (default 30s, must be 
 1. Local: `Me.XTarget` iteration
 2. Remote: `share.remoteData()` returning `{ [charName] = { mobs = { [mobId] = pct } } }`
 
-For each mob, attribution decides the holder by:
+Holder attribution is now the canonical chain documented in [[architecture#Holder attribution priority|architecture.md → Holder attribution priority]]. Briefly:
 
-1. **Current target** → use `Target.AggroHolder.ID` (most reliable, server-confirmed)
-2. **Pet's swing target** → attribute to pet
-3. **Highest pct character** → that character is the heuristic holder
-4. **All non-holder members with non-100 pct who have pets** → infer pet holds (covers multi-mob fights where the publisher's pet has aggro on multiple mobs but is only swinging at one)
-5. **Fallback** → MT, then self
+1. **Real-time hit (combat events)** → me — see [[../decisions/0005-combat-event-detection|ADR 0005]]
+2. **Local 100%** (`info.pcts[me] >= 100`) → me — see [[../decisions/0004-holder-attribution-trusts-local-100pct|ADR 0004]]
+3. **`Target.AggroHolder` for current target** — when my pct < 100 and the mob is the current target
+4. **Heuristic** — highest pct character → MT fallback if max < 100 → self fallback
 
-Sub-bar pct shown = max non-holder pct = "threat from others." When holder is MT/pet and threat is low, color is green. When holder is anyone else, color is red.
+Pet inference (peer at non-100 pct + has pet → pet probably holds) runs *before* the priority chain on the merged pct table. The previously-listed "Pet's swing target → pet" rule was removed in ADR 0004.
 
-See [[../decisions/0002-tlo-surface|ADR 0002]] for the constraints that drove this attribution model (no per-spawn aggro TLO).
+Mob bar color: green when MT or any pet holds, red when a non-MT player holds (peel needed). See `ui.lua:colorForMob`.
+
+See [[../decisions/0002-tlo-surface|ADR 0002]] for the constraints that drove the original model (no per-spawn aggro TLO).
 
 ## Examples in real chat
 
@@ -124,6 +125,7 @@ See [[../decisions/0002-tlo-surface|ADR 0002]] for the constraints that drove th
 
 ## Future protocol additions (not implemented)
 
-- **Explicit holder events** — `AGM-GOT:<char>:<mobId>` / `AGM-LOST:<char>:<mobId>` for finer-grained transition signaling. Currently inferred from pct crossing 100. Adding explicit events would reduce inference error at the cost of protocol complexity.
+- **Combat-event hit broadcast** — `AGMH:<charName>:<mobId>,<mobId>,...` listing mobs that have hit / tried to hit the publisher within the local TTL window. Receiver applies Priority -1 attribution to that peer for those mobs (same model as `combat.lua` does locally — see [[../decisions/0005-combat-event-detection|ADR 0005]]). Publish cadence: event-driven on first new attacker, rate-limited; plus keepalive. Will get its own ADR when implemented.
+- **Explicit holder events** — `AGM-GOT:<char>:<mobId>` / `AGM-LOST:<char>:<mobId>` for finer-grained transition signaling. Currently inferred from pct crossing 100. Adding explicit events would reduce inference error at the cost of protocol complexity. Largely subsumed by the AGMH proposal above for the holder-gain case.
 - **Mob HP** — `mobId@<pct>:<hpPct>` would let the meter de-prioritize near-dead mobs. Possible compact extension.
 - **Versioning** — a `AGM-V2:` prefix would allow incompatible format changes while maintaining backward compatibility. Not needed yet; format hasn't changed.

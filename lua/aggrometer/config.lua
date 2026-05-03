@@ -72,6 +72,14 @@ local DEFAULTS = {
         autoResetStale     = true,
         staleThresholdSec  = 3,
     },
+    -- Real-time hit detection — see decisions/0005-combat-event-detection.md.
+    -- attackerTtlSec: how long a mob stays "recently attacked me" after
+    -- the last detected hit/miss event before falling out of priority -1.
+    -- Should be longer than the gap between two consecutive swings (~3s
+    -- for typical mobs). 5s gives a comfortable margin.
+    combat = {
+        attackerTtlSec = 5.0,
+    },
 }
 
 -- ---------------------------------------------------------------------------
