@@ -263,16 +263,35 @@ local function handleAGMInvite(sender, channelName)
     end
 end
 
--- The chat event pattern: EQ formats channel chat as
---   <Sender> tells <channel>:<slot>, '<message>'
--- We catch any line matching that, then filter by AGM-prefix in the body.
-local function onChatLine(line, sender, channel, slot, msg)
-    if not msg then return end
+-- Shared dispatch — works regardless of chat format the message arrived in.
+local function dispatchAGM(sender, msg)
+    if not msg or not sender then return end
     if msg:sub(1, 11) == 'AGM-INVITE:' then
         handleAGMInvite(sender, msg:sub(12))
     elseif msg:sub(1, 4) == 'AGM:' then
         handleAGMData(sender, msg:sub(5))
     end
+end
+
+-- Channel chat (where the AGM: data flow lives once both peers /join'd).
+-- Format: "<Sender> tells <channelName>:<slot>, '<message>'"
+local function onChannelChat(line, sender, channel, slot, msg)
+    dispatchAGM(sender, msg)
+end
+
+-- Group / raid chat (where AGM-INVITE bootstrap lines arrive when one
+-- peer runs /agm announce). Format:
+--   "<Sender> tells the group, '<message>'"
+--   "<Sender> tells the raid, '<message>'"
+-- Both patterns hand off to the same dispatch.
+local function onGroupOrRaidChat(line, sender, msg)
+    dispatchAGM(sender, msg)
+end
+
+-- /tell support — your buddy can also invite you with a direct tell:
+--   "<Sender> tells you, '<message>'"
+local function onTellChat(line, sender, msg)
+    dispatchAGM(sender, msg)
 end
 
 -- ---------------------------------------------------------------------------
@@ -286,12 +305,18 @@ function M.init(charName)
     if pruned > 0 then
         chatf('pruned %d stale channel(s) from config', pruned)
     end
-    -- Register the chat event hook ONCE. Pattern matches standard EQ
-    -- channel chat format. If your EQ client uses a different format,
-    -- this won't fire — debug with /agm share status to see if remote
-    -- data is arriving.
+    -- Register chat event hooks for the four formats AGM messages might
+    -- arrive in. EQ's chat format varies by chat type:
+    --   * channel chat (the AGM: data flow path)
+    --   * group chat (where /agm announce sends AGM-INVITE in a group)
+    --   * raid chat (same, but for raids)
+    --   * /tell (so the recipient gets prompted even without /g working,
+    --     useful when peers aren't yet in the same EQ group)
     pcall(function()
-        mq.event('aggrometer_chat', "#1# tells #2#:#3#, '#4#'", onChatLine)
+        mq.event('agm_channel', "#1# tells #2#:#3#, '#4#'",  onChannelChat)
+        mq.event('agm_group',   "#1# tells the group, '#2#'", onGroupOrRaidChat)
+        mq.event('agm_raid',    "#1# tells the raid, '#2#'",  onGroupOrRaidChat)
+        mq.event('agm_tell',    "#1# tells you, '#2#'",       onTellChat)
     end)
     _initialized = true
 end
@@ -379,14 +404,22 @@ function M.announce()
     chatf('announced channel %s to %s chat', _activeChannel, kind)
 end
 
--- /agm accept
-function M.acceptInvite()
-    if not _pendingInvite then
-        chat('no pending invite')
+-- /agm accept [channelname]
+-- With no arg: joins the most recent invite seen via chat hook.
+-- With arg: joins that channel directly. Useful when your buddy can't
+-- /g you (not in same group yet) and just told you the channel name
+-- via /tell, voice chat, Discord, etc.
+function M.acceptInvite(channelOverride)
+    local channel
+    if channelOverride and channelOverride ~= '' then
+        channel = channelOverride
+    elseif _pendingInvite then
+        channel = _pendingInvite.channel
+        _pendingInvite = nil
+    else
+        chat('no pending invite. usage: /agm accept [channelname]')
         return
     end
-    local channel = _pendingInvite.channel
-    _pendingInvite = nil
     -- Parse the channel back to extract the leader+suffix so we can save it.
     local leader, suffix = channel:match('^agm%-(.+)%-([^%-]+)$')
     if leader and suffix then

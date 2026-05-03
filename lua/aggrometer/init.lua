@@ -52,7 +52,7 @@ local function printHelp()
     chat('share commands (cross-character XTarget visibility via EQ chat):')
     chat('  share on|off|status        - manage the EQ chat channel')
     chat('  announce                   - broadcast invite to group/raid chat')
-    chat('  accept                     - join the most recent invite')
+    chat('  accept [channel]           - join the most recent invite, or a named channel')
     chat('  trust on|off               - auto-accept invites from group members')
     chat('  channel list               - list remembered channels')
     chat('  channel forget <leader>|all - drop a remembered channel')
@@ -163,7 +163,7 @@ local function commandHandler(...)
     elseif sub == 'announce' then
         share.announce()
     elseif sub == 'accept' then
-        share.acceptInvite()
+        share.acceptInvite(args[2])
     elseif sub == 'trust' then
         local arg = (args[2] or ''):lower()
         if arg == 'on' or arg == 'true' or arg == '1' then
