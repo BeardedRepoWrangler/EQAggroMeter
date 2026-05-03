@@ -157,8 +157,10 @@ local function commandHandler(...)
             share.stop()
         elseif arg == 'status' then
             share.status()
+        elseif arg == 'debug' then
+            share.debug()
         else
-            chatf('usage: /agm share on|off|status   (got "%s")', arg)
+            chatf('usage: /agm share on|off|status|debug   (got "%s")', arg)
         end
     elseif sub == 'announce' then
         share.announce()

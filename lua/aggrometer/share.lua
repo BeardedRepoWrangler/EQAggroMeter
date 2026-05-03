@@ -492,4 +492,59 @@ end
 
 function M.activeChannel() return _activeChannel end
 
+-- /agm share debug — diagnostic dump for troubleshooting why data isn't
+-- flowing between peers. Run on BOTH ends, paste output to compare.
+function M.debug()
+    chat('--- share debug ---')
+    chat(string.format('me: %s   share.enabled: %s   active channel: %s',
+        _myCharName, tostring(config.get('share.enabled')), tostring(_activeChannel)))
+
+    -- Joined channels per EverQuest TLO
+    local count = tlo(function() return mq.TLO.EverQuest.ChatChannels() end, 0)
+    chatf('joined channels (%d):', count)
+    for i = 1, count do
+        local name = tlo(function() return mq.TLO.EverQuest.ChatChannel(i)() end, '?')
+        local mark = (_activeChannel and name and name:lower() == _activeChannel:lower()) and '  <-- our channel' or ''
+        chatf('  slot %d: %s%s', i, tostring(name), mark)
+    end
+
+    -- Slot we'd send to
+    if _activeChannel then
+        local slot = findChannelSlot(_activeChannel)
+        if slot then
+            chatf('publish would send to slot %d via /%d', slot, slot)
+        else
+            chatf('\arWARNING: active channel %s not found in joined list — /join may have failed\ax',
+                _activeChannel)
+        end
+    end
+
+    -- Sample payload
+    local payload = buildPublishPayloadFromMe()
+    if payload then
+        chatf('current sample payload: %s', payload)
+    else
+        chat('current sample payload: (empty — no XTargets to publish)')
+    end
+
+    -- Send a test ping
+    if _activeChannel then
+        local testMsg = string.format('AGM-DEBUG-PING:%s:%d', _myCharName, math.floor(os.clock() * 1000))
+        local ok = sendToChannel(_activeChannel, testMsg)
+        chatf('sent test ping: %s   (peers should see it in chat)', ok and 'ok' or 'FAILED')
+        chatf('test message body was: %s', testMsg)
+    end
+
+    -- Remote peers
+    local rcount = 0
+    for _ in pairs(_remote) do rcount = rcount + 1 end
+    chatf('remote peers tracked: %d', rcount)
+    for charName, data in pairs(_remote) do
+        local age = math.floor((nowMs() - (data.updated or 0)) / 1000)
+        local mn = 0
+        for _ in pairs(data.mobs or {}) do mn = mn + 1 end
+        chatf('  %s: %d mobs, last update %ds ago', charName, mn, age)
+    end
+end
+
 return M
