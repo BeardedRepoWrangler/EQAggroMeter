@@ -74,36 +74,34 @@ local function buildSelf()
     }
 end
 
--- Step 5 v2: build a holder→[mobs] map from the player's XTarget list.
--- Each XTarget mob is attributed to whoever currently holds aggro on it,
--- so sub-bars appear under the actual tank rather than always under self.
+-- Build a holder→[mobs] map merging local XTarget + remote published
+-- XTarget data (from share.lua) so attribution uses the most accurate
+-- per-character aggro info available.
 --
--- Attribution sources (in priority order):
---   1. mob == current target → use Target.AggroHolder.ID (known good).
---   2. mob == Me.Pet.Target.ID → attribute to my pet (high confidence —
---      the pet is actively swinging at it).
---   3. My aggro % on the mob is < 100 AND there's an MT in the roster
---      that isn't us → attribute to MT. Generalization of the older
---      "pct == 0 → MT" rule. Rationale: if I'm not at parity with the
---      holder, someone else has more aggro than me; the MT is the most
---      likely candidate. In necro-solo this attributes to the pet (which
---      tagSoloMT marked as MT). In group it attributes to the tank.
---      Without this rule, multi-mob fights show only the pet's *current
---      swing target* under the pet — every other mob on the pet's hate
---      list incorrectly displays under the player.
---   4. Otherwise → default to self.
+-- Algorithm:
+--   1. Aggregate per-mob aggro: { mobId -> { charName -> pct } } from
+--      local Me.XTarget plus every remote character's published xtargets.
+--   2. For each mob, determine holder via:
+--      a. Target.AggroHolder for the current target (known good).
+--      b. Me.Pet.Target.ID → my pet (when pet is actively swinging).
+--      c. The character with the highest pct across all sources.
+--      d. If max pct < 100 (mob unclaimed), fall back to MT.
+--      e. Final fallback to self.
+--   3. Sub-bar pct = max NON-HOLDER pct across all sources. This is the
+--      "threat to the holder" indicator — useful because:
+--        * Under YOUR bar, it shows how close other characters are to
+--          pulling from you.
+--        * Under another player's bar, it shows your pct on their mob
+--          (= how close YOU are to pulling).
+--   4. Skip "boring" entries (mob you hold, no other character has any
+--      aggro on it, not current target) — keeps the meter uncluttered.
 --
--- Limitations:
---   * In a group with multiple tanks (off-tank, etc.), rule 3 attributes
---     to whichever single MT we tagged — could be wrong for off-tank mobs.
---   * MQ doesn't expose other characters' .Target so we can't deterministi-
---     cally know the holder without targeting the mob.
+-- Without remote data this still works: mobAggro only contains your own
+-- pcts, and attribution falls into the heuristic-holder branch as before.
 --
--- Mobs we have 0% aggro on are kept in the result IF they're attributed
--- to a non-self holder; otherwise dropped (no useful info to surface).
--- Same dedupe-by-mobId as before because XTarget can list the same mob
--- in multiple slots.
-local function buildXTargetsByHolder(target, members)
+-- Stale slot detection + auto-reset is also handled here, in the local
+-- iteration phase.
+local function buildXTargetsByHolder(target, members, remoteData)
     local byHolder = {}
 
     local mySpawnId = tlo(function() return mq.TLO.Me.ID() end, 0)
@@ -126,47 +124,37 @@ local function buildXTargetsByHolder(target, members)
     local currentTargetId       = (target and target.targetId)  or 0
     local currentTargetHolderId = (target and target.holderId)  or 0
 
-    local function attribute(mobId, myPctOnMob)
-        if mobId == currentTargetId and currentTargetHolderId > 0 then
-            return currentTargetHolderId
+    local myCharName = tlo(function() return mq.TLO.Me.Name() end, '?')
+
+    -- Build name -> spawnId lookup from roster (player members only — pets
+    -- aren't peers in the share protocol).
+    local nameToSpawn = {}
+    for _, m in ipairs(members or {}) do
+        if m.name and not m.isPet then
+            nameToSpawn[m.name] = m.spawnId
         end
-        if myPetId > 0 and mobId == myPetTargetId then
-            return myPetId
-        end
-        -- If I'm not at 100% (= not tied with holder = not the holder),
-        -- the MT most likely has it. Attribute there.
-        if myPctOnMob < 100 and mtSpawnId > 0 and mtSpawnId ~= mySpawnId then
-            return mtSpawnId
-        end
-        return mySpawnId
     end
 
-    local autoReset       = config.get('xtarget.autoResetStale')
-    local staleThreshold  = config.get('xtarget.staleThresholdSec') or 3
-    local nowClock        = os.clock()
+    -- Aggregate per-mob aggro data: mobInfo[mobId] = { name, pcts = { [char]=pct } }
+    local mobInfo = {}
 
-    local seen = {}
+    -- Local: iterate Me.XTarget. This phase also handles stale-slot
+    -- detection + auto-reset (preserved from the prior implementation).
+    local autoReset      = config.get('xtarget.autoResetStale')
+    local staleThreshold = config.get('xtarget.staleThresholdSec') or 3
+    local nowClock       = os.clock()
     local slots = tlo(function() return mq.TLO.Me.XTargetSlots() end, 0)
+    local seen = {}
     for i = 1, slots do
         local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
         if mobId == 0 then
-            _slotState[i] = nil  -- empty slot, drop tracking
+            _slotState[i] = nil
         elseif not seen[mobId] then
             seen[mobId] = true
-            -- Skip:
-            --   * Corpses (Spawn.Type='Corpse') — XTarget keeps recently
-            --     killed mobs until the slot cycles.
-            --   * Stale slots where Spawn(mobId) no longer resolves
-            --     (mob despawned, zoned out). Detect by CleanName=nil.
-            --   These both render as confusing junk entries otherwise
-            --   (corpses as "<name>'s corpse 0%", stale as "? 0%").
             local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
             local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
             local isStale = (not mobName or mobName == '')
 
-            -- Stale-slot reset tracking. Per-slot state remembers when we
-            -- first saw this mob ID become unresolvable; if it stays stale
-            -- past the threshold we issue /xtarget remove <slot>.
             local s = _slotState[i]
             if not s or s.mobId ~= mobId then
                 _slotState[i] = { mobId = mobId, staleSince = isStale and nowClock or nil }
@@ -189,18 +177,102 @@ local function buildXTargetsByHolder(target, members)
 
             if mobName and mobName ~= '' and mobType ~= 'Corpse' then
                 local pct = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
-                local holderId = attribute(mobId, pct)
-                -- Drop pct=0 mobs that fall through to self attribution.
-                if pct > 0 or holderId ~= mySpawnId then
-                    byHolder[holderId] = byHolder[holderId] or {}
-                    table.insert(byHolder[holderId], {
-                        mobId     = mobId,
-                        mobName   = mobName,
-                        pctAggro  = pct,
-                        isCurrent = (mobId == currentTargetId),
-                    })
+                mobInfo[mobId] = { name = mobName, pcts = { [myCharName] = pct } }
+            end
+        end
+    end
+
+    -- Remote: ingest published xtargets from each peer. If a mob isn't in
+    -- our local list yet, look up its name (skip if despawned/corpse).
+    for charName, rd in pairs(remoteData or {}) do
+        if charName ~= myCharName then  -- defensive: never ingest our own echo
+            for mobId, mobData in pairs(rd.mobs or {}) do
+                if not mobInfo[mobId] then
+                    local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
+                    local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
+                    if mobName and mobName ~= '' and mobType ~= 'Corpse' then
+                        mobInfo[mobId] = { name = mobName, pcts = {} }
+                    end
+                end
+                if mobInfo[mobId] then
+                    mobInfo[mobId].pcts[charName] = mobData.pct
                 end
             end
+        end
+    end
+
+    -- Attribute each mob and build byHolder.
+    for mobId, info in pairs(mobInfo) do
+        local holderId
+
+        -- Priority 1: known holder of current target (most reliable).
+        if mobId == currentTargetId and currentTargetHolderId > 0 then
+            holderId = currentTargetHolderId
+        -- Priority 2: pet's swing target → pet (high confidence).
+        elseif myPetId > 0 and mobId == myPetTargetId then
+            holderId = myPetId
+        else
+            -- Priority 3: heuristic — character with highest pct is most-
+            -- likely holder. Tie at 100 = whoever wins iteration order.
+            local maxPct, maxChar = -1, nil
+            for char, pct in pairs(info.pcts) do
+                if pct > maxPct then
+                    maxPct = pct
+                    maxChar = char
+                end
+            end
+            if maxChar then
+                holderId = nameToSpawn[maxChar] or 0
+            end
+            -- If max pct < 100, no one has truly "claimed" the mob —
+            -- attribute to MT as the expected tank.
+            if (not maxPct or maxPct < 100) and mtSpawnId > 0 then
+                holderId = mtSpawnId
+            end
+            if not holderId or holderId == 0 then
+                holderId = mySpawnId
+            end
+        end
+
+        -- Display pct = max non-holder pct (= threat from others).
+        -- Falls back to holder's own pct if there's no other-character
+        -- data (e.g., solo, or a mob only one peer knows about).
+        local maxNonHolderPct, maxNonHolderChar = -1, nil
+        for char, pct in pairs(info.pcts) do
+            if (nameToSpawn[char] or 0) ~= holderId then
+                if pct > maxNonHolderPct then
+                    maxNonHolderPct = pct
+                    maxNonHolderChar = char
+                end
+            end
+        end
+        local displayPct
+        if maxNonHolderPct >= 0 then
+            displayPct = maxNonHolderPct
+        else
+            for char, pct in pairs(info.pcts) do
+                if (nameToSpawn[char] or 0) == holderId then
+                    displayPct = pct
+                    break
+                end
+            end
+            displayPct = displayPct or 0
+        end
+
+        -- Skip "boring" sub-bars: holder is self, no non-holder threat,
+        -- not the current target. These are mobs you hold quietly.
+        local isBoring = (holderId == mySpawnId) and
+                         (maxNonHolderPct < 0 or maxNonHolderPct == 0) and
+                         (mobId ~= currentTargetId)
+        if not isBoring then
+            byHolder[holderId] = byHolder[holderId] or {}
+            table.insert(byHolder[holderId], {
+                mobId      = mobId,
+                mobName    = info.name,
+                pctAggro   = displayPct,
+                isCurrent  = (mobId == currentTargetId),
+                threatChar = maxNonHolderChar,
+            })
         end
     end
 
@@ -278,52 +350,18 @@ local function buildRoster()
         roles.tagSoloMT(members)
     end
 
-    -- Step 5 v2: distribute xtarget mobs to whichever roster member is
-    -- currently holding aggro on each. Falls back to self when we can't
-    -- detect the holder. Pass members so the attribution can find the
-    -- MT spawn ID (which may be the pet for necro-style solo).
-    local xByHolder = buildXTargetsByHolder(target, members)
+    -- Step 5 v2 + Step 7 phase 2: distribute xtarget mobs to whichever
+    -- roster member is currently holding aggro on each, using merged
+    -- local + remote (peer-published) data. The function reads
+    -- share.remoteData() via the passed map so attribution is informed
+    -- by every peer's own perspective on their xtargets.
+    local remoteData = share.remoteData() or {}
+    local xByHolder = buildXTargetsByHolder(target, members, remoteData)
     for _, m in ipairs(members) do
         if m.spawnId and xByHolder[m.spawnId] then
             m.xtargets = xByHolder[m.spawnId]
-        end
-    end
-
-    -- Step 7 phase 2: merge remote XTarget data from share.lua. For each
-    -- non-self non-pet roster member, if we've received their published
-    -- XTarget snapshot via the channel, REPLACE their attributed sub-bar
-    -- list with the remote data — that's their actual perspective on what
-    -- they have aggro on, more accurate than our local heuristic.
-    --
-    -- Local heuristic attribution still applies when no remote data is
-    -- available (member isn't running the script, or hasn't broadcast yet).
-    local remoteData = share.remoteData() or {}
-    for _, m in ipairs(members) do
-        if not m.isPet and not m.isMe and m.name then
-            local rd = remoteData[m.name]
-            if rd and rd.mobs then
-                local newXt = {}
-                for mobId, mobData in pairs(rd.mobs) do
-                    -- Drop corpses + stale-spawn entries on the receive
-                    -- side too. Same filter as the publisher should have
-                    -- applied, but defensive in case publisher is older.
-                    local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
-                    local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
-                    if mobName and mobName ~= '' and mobType ~= 'Corpse' then
-                        table.insert(newXt, {
-                            mobId    = mobId,
-                            mobName  = mobName,
-                            pctAggro = mobData.pct,
-                            isCurrent = (mobId == target.targetId),
-                            isRemote  = true,
-                        })
-                    end
-                end
-                table.sort(newXt, function(a, b)
-                    return (a.pctAggro or 0) > (b.pctAggro or 0)
-                end)
-                m.xtargets = newXt
-            end
+        else
+            m.xtargets = nil  -- clear stale attributions
         end
     end
 
