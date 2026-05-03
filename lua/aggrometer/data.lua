@@ -126,12 +126,17 @@ local function buildXTargetsByHolder(target, members, remoteData)
 
     local myCharName = tlo(function() return mq.TLO.Me.Name() end, '?')
 
-    -- Build name -> spawnId lookup from roster (player members only — pets
-    -- aren't peers in the share protocol).
+    -- Build name -> spawnId lookup from roster. INCLUDES pets so that
+    -- pet inference (below) can attribute mobs to a pet by name.
     local nameToSpawn = {}
+    -- And per-owner pet lookup for inference: ownerSpawnId -> pet entry
+    local petByOwnerSpawn = {}
     for _, m in ipairs(members or {}) do
-        if m.name and not m.isPet then
+        if m.name then
             nameToSpawn[m.name] = m.spawnId
+        end
+        if m.isPet and m.ownerSpawnId then
+            petByOwnerSpawn[m.ownerSpawnId] = m
         end
     end
 
@@ -196,6 +201,37 @@ local function buildXTargetsByHolder(target, members, remoteData)
                 end
                 if mobInfo[mobId] then
                     mobInfo[mobId].pcts[charName] = mobData.pct
+                end
+            end
+        end
+    end
+
+    -- Pet inference: the wire protocol only carries player pct, so when a
+    -- peer's pet is the actual holder, the receiver only sees the peer at
+    -- some non-100 pct and incorrectly attributes to the peer. Compensate:
+    -- if no character is at 100% on a mob, and any character with non-zero
+    -- aggro has a pet in the roster, treat the pet as a holder candidate.
+    --
+    -- Inference is skipped when someone is already at 100 (= they really
+    -- are holding) so this doesn't override known-good attribution.
+    --
+    -- For self's own pet, this duplicates what the priority-2 rule
+    -- (Me.Pet.Target.ID) already handles for the swing target — pet
+    -- inference covers the broader "pet has it but isn't currently
+    -- swinging at it" case (multi-mob fights).
+    for mobId, info in pairs(mobInfo) do
+        local anyAt100 = false
+        for _, pct in pairs(info.pcts) do
+            if pct >= 100 then anyAt100 = true; break end
+        end
+        if not anyAt100 then
+            for char, pct in pairs(info.pcts) do
+                if pct > 0 then
+                    local charSpawnId = nameToSpawn[char]
+                    local pet = charSpawnId and petByOwnerSpawn[charSpawnId]
+                    if pet and pet.name and not info.pcts[pet.name] then
+                        info.pcts[pet.name] = 100  -- pet probably holds
+                    end
                 end
             end
         end

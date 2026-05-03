@@ -218,18 +218,45 @@ local function buildPublishPayloadFromMe()
     return string.format('AGM:%s:%s', _myCharName, table.concat(parts, ','))
 end
 
+-- AGMP: publishes the pet's swing target as a separate broadcast,
+-- attributed to the pet by name. Receivers parse it and credit the pet
+-- with 100% aggro on that mob. Covers the high-confidence case (pet
+-- actively swinging); broader pet-holding cases rely on receive-side
+-- inference in data.lua.
+local function buildPetPublishPayload()
+    local petId = tlo(function() return mq.TLO.Me.Pet.ID() end, 0)
+    if petId <= 0 then return nil end
+    local petName = tlo(function() return mq.TLO.Me.Pet.CleanName() end, nil)
+    if not petName or petName == '' then return nil end
+    local petTargetId = tlo(function() return mq.TLO.Me.Pet.Target.ID() end, 0)
+    if petTargetId <= 0 then return nil end
+    -- Verify the target spawn still exists (not despawned/corpse)
+    local mobName = tlo(function() return mq.TLO.Spawn(petTargetId).CleanName() end, nil)
+    local mobType = tlo(function() return mq.TLO.Spawn(petTargetId).Type() end, '')
+    if not mobName or mobName == '' or mobType == 'Corpse' then return nil end
+    return string.format('AGMP:%s:%d@100', petName, petTargetId)
+end
+
 function M.publish()
     if not config.get('share.enabled') then return end
     local nowM = nowMs()
     local interval = config.get('share.publishMs') or 2000
     if (nowM - _lastPublishMs) < interval then return end
 
+    -- Publish player aggro
     local payload = buildPublishPayloadFromMe()
     if payload then
-        -- Channel arg is ignored in the group-chat transport — sendToChannel
-        -- routes via /g or /rs based on current group/raid state.
         sendToChannel(nil, payload)
     end
+
+    -- Publish pet aggro (only if pet has a current swing target — high
+    -- confidence case). Receive-side inference in data.lua handles the
+    -- broader case where pet has aggro but isn't actively swinging.
+    local petPayload = buildPetPublishPayload()
+    if petPayload then
+        sendToChannel(nil, petPayload)
+    end
+
     _lastPublishMs = nowM
 end
 
@@ -286,6 +313,11 @@ local function dispatchAGM(sender, msg, source)
         handleAGMInvite(sender, msg:sub(12))
     elseif msg:sub(1, 16) == 'AGM-DEBUG-PING:' then
         chatf('received debug ping from %s: %s', sender, msg)
+    elseif msg:sub(1, 5) == 'AGMP:' then
+        -- Pet aggro broadcast. Format: AGMP:<petName>:<mobId>@<pct>,...
+        -- Stored in _remote keyed by pet name; data.lua's attribution
+        -- treats it like any other peer's data.
+        handleAGMData(sender, msg:sub(6))
     elseif msg:sub(1, 4) == 'AGM:' then
         handleAGMData(sender, msg:sub(5))
     end
