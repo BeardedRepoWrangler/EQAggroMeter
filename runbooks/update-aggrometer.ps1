@@ -85,8 +85,22 @@ if (-not (Test-Path $destDir)) {
     New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 }
 
-Write-Host 'Installing...' -NoNewline
+# Snapshot what's currently installed so we can report the diff afterward.
+$beforeNames = @()
+if (Test-Path $destDir) {
+    $beforeNames = Get-ChildItem -Path $destDir -File -ErrorAction SilentlyContinue |
+                   Select-Object -ExpandProperty Name
+}
+
+Write-Host 'Mirroring destination from source...' -NoNewline
 try {
+    # True mirror: wipe everything in dest first, then copy fresh.
+    # Handles updates (file changed), additions (new file in repo), and
+    # removals (file deleted from repo) correctly. Safe because the
+    # aggrometer folder should only contain code files we ship — your
+    # config lives in MacroQuest's config dir, not here.
+    Get-ChildItem -Path $destDir -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     Copy-Item -Path "$srcLuaDir\*" -Destination $destDir -Recurse -Force
     Write-Host ' ok' -ForegroundColor Green
 } catch {
@@ -94,6 +108,16 @@ try {
     Write-Host "  $($_.Exception.Message)"
     exit 1
 }
+
+# Report what changed vs. the snapshot.
+$afterNames = Get-ChildItem -Path $destDir -File | Select-Object -ExpandProperty Name
+$added   = @($afterNames  | Where-Object { $beforeNames -notcontains $_ })
+$removed = @($beforeNames | Where-Object { $afterNames  -notcontains $_ })
+$kept    = @($afterNames  | Where-Object { $beforeNames -contains    $_ })
+
+if ($added.Count   -gt 0) { Write-Host ('  + added:   ' + ($added   -join ', ')) -ForegroundColor Green }
+if ($removed.Count -gt 0) { Write-Host ('  - removed: ' + ($removed -join ', ')) -ForegroundColor Yellow }
+if ($kept.Count    -gt 0) { Write-Host ('  ~ updated: ' + ($kept    -join ', ')) -ForegroundColor Cyan }
 
 # Cleanup
 Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
