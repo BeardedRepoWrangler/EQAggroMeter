@@ -345,6 +345,16 @@ local function colorForMob(holderMember, mob)
     return COLOR.HOLDER
 end
 
+-- Helper: extract x/y from an ImVec2-or-table return. The MQ Lua ImGui
+-- binding sometimes hands back ImVec2 with .x/.y properties, sometimes a
+-- 2-element table. Handle both.
+local function vec2xy(v)
+    if type(v) == 'table' then
+        return (v.x or v[1] or 0), (v.y or v[2] or 0)
+    end
+    return 0, 0
+end
+
 local function drawMobs(roster)
     if not roster.mobs or #roster.mobs == 0 then
         ImGui.TextColored(COLOR.DIM[1], COLOR.DIM[2], COLOR.DIM[3], COLOR.DIM[4],
@@ -363,27 +373,68 @@ local function drawMobs(roster)
         local color = colorForMob(holder, mob)
         local pct = mob.pctAggro or 0
         local fill = math.max(0, math.min(100, pct)) / 100.0
-        local marker = mob.isCurrent and ' *' or ''
-        local threatStr = ''
-        if mob.threatChar and pct > 0 then
-            threatStr = string.format('  threat: %s %d%%', mob.threatChar, pct)
-        end
-        local label = string.format('%s  →  %s%s%s',
-            mob.mobName or '?',
-            mob.holderName or '?',
-            threatStr,
-            marker)
 
+        -- Three text segments: left (mob), middle (holder), right (threat)
+        local mobName   = mob.mobName or '?'
+        local holderStr = mob.holderName or '?'
+        local threatStr
+        if mob.threatChar and pct > 0 then
+            threatStr = string.format('%s %d%%', mob.threatChar, pct)
+        elseif pct > 0 then
+            threatStr = string.format('%d%%', pct)
+        else
+            threatStr = ''
+        end
+        if mob.isCurrent then
+            threatStr = (threatStr == '' and '*' or (threatStr .. ' *'))
+        end
+
+        -- Draw bar with EMPTY overlay so we can position text manually.
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, color[1], color[2], color[3], color[4])
-        ImGui.ProgressBar(fill, -1, 18, label)
+        ImGui.ProgressBar(fill, -1, 18, '')
         ImGui.PopStyleColor()
 
-        -- Click handlers — slot is stable, so click target stays consistent
-        -- even as the holder changes across ticks.
-        if ImGui.IsItemClicked(0) then
+        -- Capture click events on the bar BEFORE the overlay code runs.
+        -- IsItemClicked queries the most recent item — the ProgressBar.
+        local leftClicked  = ImGui.IsItemClicked(0)
+        local rightClicked = ImGui.IsItemClicked(1)
+
+        -- Overlay three text segments via the window's draw list. Wrapped
+        -- in pcall so binding incompatibilities don't crash the UI; on
+        -- failure we fall back to a single combined string below the bar.
+        local overlayOk = pcall(function()
+            local minX, minY = vec2xy(ImGui.GetItemRectMin())
+            local maxX, maxY = vec2xy(ImGui.GetItemRectMax())
+            local barH = maxY - minY
+
+            local dl   = ImGui.GetWindowDrawList()
+            local tcol = ImGui.GetColorU32(ImGuiCol.Text)
+
+            local hw   = select(1, vec2xy(ImGui.CalcTextSize(holderStr)))
+            local tw   = (threatStr ~= '') and select(1, vec2xy(ImGui.CalcTextSize(threatStr))) or 0
+            local _, h = vec2xy(ImGui.CalcTextSize(mobName))
+            if h <= 0 then h = 14 end
+            local textY = minY + (barH - h) / 2
+
+            dl:AddText(minX + 6, textY, tcol, mobName)
+            dl:AddText((minX + maxX) / 2 - hw / 2, textY, tcol, holderStr)
+            if threatStr ~= '' then
+                dl:AddText(maxX - tw - 6, textY, tcol, threatStr)
+            end
+        end)
+
+        if not overlayOk then
+            -- Binding doesn't expose draw-list APIs cleanly. Fall back to
+            -- a single text line below the bar.
+            ImGui.TextColored(COLOR.DIM[1], COLOR.DIM[2], COLOR.DIM[3], COLOR.DIM[4],
+                string.format('  %s  →  %s  %s', mobName, holderStr, threatStr))
+        end
+
+        -- Apply captured clicks
+        if leftClicked then
             mq.cmdf('/target id %d', mob.mobId)
         end
-        if ImGui.IsItemClicked(1) then
+        if rightClicked then
             ImGui.OpenPopup('mob_' .. tostring(mob.mobId))
         end
         if ImGui.BeginPopup('mob_' .. tostring(mob.mobId)) then
