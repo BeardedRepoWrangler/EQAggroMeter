@@ -455,20 +455,25 @@ function M.tick()
 end
 
 -- /agm share on
--- In the group-chat transport, "on" just means "broadcast my XTarget to
--- group chat every 2s." No channel to join, no name to announce.
+-- Enables sharing regardless of current group/raid state. When solo
+-- (or otherwise without a transport), broadcasts silently no-op —
+-- sendToChannel returns false with no group/raid, no chat traffic
+-- generated. Auto-engages the moment you're in a group or raid.
+--
+-- Safe to bake into a social button: one press, fire-and-forget.
 function M.start()
-    local leader, kind = detectLeader()
-    if not leader then
-        chat('not in a group or raid — nothing to share')
-        return
-    end
-    _activeLeader = leader
-    _activeKind   = kind
     config.set('share.enabled', true)
-    chatf('share on. transport: %s chat. each peer running the script auto-publishes; no further action needed.',
-        kind == 'raid' and 'raid' or 'group')
-    chatf('tip: filter \"AGM:\" lines to a hidden chat window if the spam bothers you.')
+    local leader, kind = detectLeader()
+    if leader then
+        _activeLeader = leader
+        _activeKind   = kind
+        chatf('share on. transport: %s chat. each peer running the script auto-publishes.',
+            kind == 'raid' and 'raid' or 'group')
+    else
+        _activeLeader = nil
+        _activeKind   = nil
+        chat('share on. (solo right now — will auto-engage when you join a group or raid)')
+    end
 end
 
 -- /agm share off
