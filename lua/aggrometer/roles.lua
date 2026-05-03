@@ -57,16 +57,65 @@ function M.tagMembers(members, roles)
     end
 
     if not explicitMT then
-        local tankCount, tankIdx = 0, nil
-        for i, m in ipairs(members) do
-            if TANK_CLASSES[m.class or ''] then
-                tankCount = tankCount + 1
-                tankIdx = i
+        -- Group case: exactly one tank-class member → flag them as MT.
+        -- Multiple tank-class members → ambiguous, leave for user override
+        -- in step 7 phase 2.
+        --
+        -- Solo case is handled separately by tagSoloMT (called after pets
+        -- are appended), because the implicit tank in solo may be the
+        -- user's pet (necro/mage/etc.) and pets aren't in `members` yet
+        -- at this point in buildRoster.
+        if #members > 1 then
+            local tankCount, tankIdx = 0, nil
+            for i, m in ipairs(members) do
+                if TANK_CLASSES[m.class or ''] then
+                    tankCount = tankCount + 1
+                    tankIdx = i
+                end
+            end
+            if tankCount == 1 then
+                members[tankIdx].isMT = true
+                members[tankIdx].isMTHeuristic = true
             end
         end
-        if tankCount == 1 then
-            members[tankIdx].isMT = true
-            members[tankIdx].isMTHeuristic = true
+    end
+end
+
+-- Solo-mode implicit MT tagging. Call AFTER pets have been appended to
+-- the roster (so we can tag the pet if appropriate).
+--
+-- Rules:
+--   1. If anything is already tagged isMT (from explicit Group.MainTank
+--      or class heuristic), do nothing.
+--   2. If self is a tank class → self is MT.
+--   3. If self is NOT a tank class but has a pet → pet is MT.
+--      (Covers necro, mage, beastlord, enchanter — pet-tanking classes.)
+--   4. Otherwise → no implicit MT (e.g., DPS solo with no pet). Color
+--      rules will treat any holder as alert, which is accurate for the
+--      "you're solo and shouldn't have aggro on anything" case.
+function M.tagSoloMT(members)
+    for _, m in ipairs(members) do
+        if m.isMT then return end
+    end
+
+    local self_
+    for _, m in ipairs(members) do
+        if m.isMe then self_ = m; break end
+    end
+    if not self_ then return end
+
+    if TANK_CLASSES[self_.class or ''] then
+        self_.isMT = true
+        self_.isMTHeuristic = true
+        return
+    end
+
+    -- Find self's pet, if any
+    for _, m in ipairs(members) do
+        if m.isPet and m.ownerSpawnId == self_.spawnId then
+            m.isMT = true
+            m.isMTHeuristic = true
+            return
         end
     end
 end

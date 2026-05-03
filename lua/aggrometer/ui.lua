@@ -6,8 +6,9 @@
 -- bar (self only — MQ doesn't expose other players' XTarget data).
 -- Raid grouping in step 4, config persistence in step 7.
 
-local mq    = require('mq')      -- needed for /target and /assist via mq.cmdf
-local ImGui = require('ImGui')
+local mq     = require('mq')      -- needed for /target and /assist via mq.cmdf
+local ImGui  = require('ImGui')
+local config = require('aggrometer.config')
 
 local M = {}
 
@@ -23,7 +24,9 @@ local COLOR = {
     HEADER   = {0.85, 0.85, 0.85, 1.0},
 }
 
-local NEAR_THRESHOLD = 80   -- becomes config in step 7
+-- Threshold + colors are read from config at applyConfig() time. The
+-- defaults below are only used until the first applyConfig call.
+local NEAR_THRESHOLD = 80
 
 -- ---------------------------------------------------------------------------
 -- internal state
@@ -45,47 +48,186 @@ local _filters = {
 -- where ImGui.ini placed the window off-screen or hidden behind UI.
 local _resetPosNext = false
 
+-- Auto-hide: ImGui overlays always render above EQ UI in MQ — there's no
+-- way to z-order an ImGui window behind EQ-native windows. Workaround:
+-- when one of these EQ windows is open, skip drawing the meter so it
+-- gets out of the way visually. The user can disable this via
+-- `/agm autohide off`.
+local _autoHide = true
+local OBSTRUCTING_WINDOWS = {
+    -- Unified inventory + finance + trading
+    'InventoryWindow',
+    'BankWnd',
+    'BigBankWnd',
+    'TradeWnd',
+    'MerchantWnd',
+    'BazaarSearchWnd',
+    'BazaarMainWnd',
+    'SpellBookWnd',
+    -- Individual bag containers (Shift+B / shift-click on a bag).
+    -- EQ uses Pack1..Pack10 for inventory bag slots in most clients;
+    -- include both case variants to be safe across EQEmu builds.
+    'Pack1',  'Pack2',  'Pack3',  'Pack4',  'Pack5',
+    'Pack6',  'Pack7',  'Pack8',  'Pack9',  'Pack10',
+    'pack1',  'pack2',  'pack3',  'pack4',  'pack5',
+    'pack6',  'pack7',  'pack8',  'pack9',  'pack10',
+}
+
+-- Cache the obstructed check across frames so we don't hit the Window TLO
+-- 60 times/sec. EQ window state changes are user-driven; 5 Hz is plenty.
+local _obstructedCachedAt = 0
+local _obstructedCached   = false
+local OBSTRUCTED_CHECK_MS = 200
+
+local function isObstructed()
+    if not _autoHide then return false end
+    local nowMs = os.clock() * 1000
+    if (nowMs - _obstructedCachedAt) < OBSTRUCTED_CHECK_MS then
+        return _obstructedCached
+    end
+    _obstructedCached = false
+    for _, wname in ipairs(OBSTRUCTING_WINDOWS) do
+        local ok, open = pcall(function() return mq.TLO.Window(wname).Open() end)
+        if ok and open then
+            _obstructedCached = true
+            break
+        end
+    end
+    _obstructedCachedAt = nowMs
+    return _obstructedCached
+end
+
 -- ---------------------------------------------------------------------------
 -- helpers
 
+-- Color rules for the main bar.
+--
+-- For self: pctAggro is the MAX threat across all xtargets (not just on
+-- current target), and `maxThreatHolderId` tells us who holds that mob.
+-- Color reflects the situation of the most threatening mob, so a 100%
+-- on a stray mob you shouldn't be holding still flares red even if the
+-- current target is fine.
+--
+-- For other members: holderId is the current target's AggroHolder (only
+-- info we have for them).
+--
+--   self holding their max-threat mob + self is MT  → green (correct)
+--   self holding their max-threat mob + not MT      → red (wrong person)
+--   member is holder of current target + is MT      → green
+--   member is holder of current target + not MT     → red
+--   not holder + pct >= 80                          → magenta (warning)
+--   pct > 100                                       → red (briefly above)
+--   otherwise                                       → blue (safe)
 local function colorFor(member, holderId)
-    if holderId > 0 and member.spawnId == holderId then return COLOR.HOLDER end
+    -- For self, use the max-threat mob's holder rather than current
+    -- target's holder, so the color reflects "what's the worst situation
+    -- I'm in" not "what about the mob I'm currently looking at".
+    local effectiveHolderId = (member.isMe and member.maxThreatHolderId) or holderId
+
+    if effectiveHolderId > 0 and member.spawnId == effectiveHolderId then
+        if member.isMT then return COLOR.HOLDER end
+        return COLOR.OVER  -- non-MT is holding → alert
+    end
     local pct = member.pctAggro or 0
     if pct > 100 then return COLOR.OVER end
     if pct >= NEAR_THRESHOLD then return COLOR.NEAR end
     return COLOR.NORMAL
 end
 
--- Color rules for per-mob xtarget sub-bars. We can't read per-mob holder
--- ID without re-targeting the mob (hostile UX), so we infer:
---   pct == 100 → you're tied with holder, which in practice almost always
---                means you ARE the holder → GREEN
---   pct >= 80  → close to holder, getting risky → magenta
---   else       → safe → blue
--- (The corner case of "you're at 100% but someone else is the actual
--- holder" is brief and rare. False-positive green is much better UX than
--- the alternative — never showing green even when you're tanking.)
-local function colorForPct(pct)
-    if pct >= 100 then return COLOR.HOLDER end
+-- Color rules for per-mob xtarget sub-bars.
+--
+-- A sub-bar appears under whichever roster member is currently holding
+-- aggro on its mob (per the holder-attribution in data.lua). The bar
+-- fill represents MY aggro % on that mob, but the color reflects the
+-- role-correctness of the holder:
+--
+--   holder is NOT MT                              → red (mob in wrong place)
+--   holder is MT + holder is me + pct >= 100      → green (I'm tanking it)
+--   holder is MT + pct >= 80                      → magenta (I'm about to pull)
+--   otherwise                                     → blue (safe)
+local function colorForSubBar(holderMember, pct)
+    if not holderMember.isMT then
+        return COLOR.OVER
+    end
+    if holderMember.isMe and pct >= 100 then
+        return COLOR.HOLDER
+    end
     if pct >= NEAR_THRESHOLD then return COLOR.NEAR end
     return COLOR.NORMAL
 end
 
-local function sortedByAggro(members)
-    local copy = {}
-    for i, m in ipairs(members) do copy[i] = m end
-    table.sort(copy, function(a, b) return (a.pctAggro or 0) > (b.pctAggro or 0) end)
-    return copy
+-- Stable player ordering for main bars. The list layout shouldn't shuffle
+-- mid-combat — easier to glance at if positions are predictable.
+--
+-- Order:
+--   1. Main Tank (player flagged isMT, non-pet)
+--   2. Main Assist (player flagged isMA, non-pet)
+--   3. All other players in their original roster order (self first, then
+--      Group.Member[1..5] order)
+--   4. Each player's pets immediately follow that player.
+--
+-- Pets being MT (necro/mage solo case) doesn't promote them — pets always
+-- render right after their owner. The owner stays in the "other players"
+-- bucket if they have no MT/MA flag of their own.
+local function stableOrder(members)
+    local players, petsByOwner = {}, {}
+    for _, m in ipairs(members) do
+        if m.isPet then
+            local oid = m.ownerSpawnId
+            if oid then
+                petsByOwner[oid] = petsByOwner[oid] or {}
+                table.insert(petsByOwner[oid], m)
+            end
+        else
+            table.insert(players, m)
+        end
+    end
+
+    local mt, ma, others = nil, nil, {}
+    for _, p in ipairs(players) do
+        if p.isMT and not mt then
+            mt = p
+        elseif p.isMA and not ma then
+            ma = p
+        else
+            table.insert(others, p)
+        end
+    end
+
+    local ordered = {}
+    if mt then table.insert(ordered, mt) end
+    if ma then table.insert(ordered, ma) end
+    for _, p in ipairs(others) do table.insert(ordered, p) end
+
+    local final = {}
+    for _, p in ipairs(ordered) do
+        table.insert(final, p)
+        local pets = petsByOwner[p.spawnId]
+        if pets then
+            for _, pet in ipairs(pets) do
+                table.insert(final, pet)
+            end
+        end
+    end
+    return final
 end
 
--- Apply the three filter toggles. Self is always shown regardless of MT/MA
--- flags — toggling "Show MT" off shouldn't hide a tank player's own bar.
+-- Apply the three filter toggles.
+--
+-- Self is always shown regardless of MT/MA flags — toggling "Show MT"
+-- off shouldn't hide a tank player's own bar.
+--
+-- Pets are NEVER hidden by Show MT or Show MA, even if the pet is
+-- functionally the MT (which happens for pet-class players solo). Pet
+-- visibility is solely controlled by Show Pets. Otherwise toggling
+-- Show MT off would hide a necro's pet, which is the entire point of
+-- the meter for that player.
 local function applyFilters(members)
     local out = {}
     for _, m in ipairs(members) do
         local hide = false
-        if not _filters.showMT and m.isMT and not m.isMe then hide = true end
-        if not _filters.showMA and m.isMA and not m.isMe then hide = true end
+        if not _filters.showMT and m.isMT and not m.isMe and not m.isPet then hide = true end
+        if not _filters.showMA and m.isMA and not m.isMe and not m.isPet then hide = true end
         if not _filters.showPets and m.isPet then hide = true end
         if not hide then table.insert(out, m) end
     end
@@ -130,23 +272,35 @@ local function drawHeader(roster)
 end
 
 local function drawFilters()
-    -- ImGui.Checkbox returns (newValue, changed); we only need newValue.
-    -- Taking just the first return discards the rest cleanly.
-    _filters.showMT   = ImGui.Checkbox('Show MT',   _filters.showMT)
+    -- ImGui.Checkbox returns (newValue, changed); take first return.
+    -- Persist to config when a value changes (debounced 2s on flush).
+    local newMT = ImGui.Checkbox('Show MT', _filters.showMT)
+    if newMT ~= _filters.showMT then
+        _filters.showMT = newMT
+        config.set('filters.showMT', newMT)
+    end
     ImGui.SameLine()
-    _filters.showMA   = ImGui.Checkbox('Show MA',   _filters.showMA)
+    local newMA = ImGui.Checkbox('Show MA', _filters.showMA)
+    if newMA ~= _filters.showMA then
+        _filters.showMA = newMA
+        config.set('filters.showMA', newMA)
+    end
     ImGui.SameLine()
-    _filters.showPets = ImGui.Checkbox('Show Pets', _filters.showPets)
+    local newPets = ImGui.Checkbox('Show Pets', _filters.showPets)
+    if newPets ~= _filters.showPets then
+        _filters.showPets = newPets
+        config.set('filters.showPets', newPets)
+    end
 end
 
--- Decide whether to render xtarget sub-bars for a member.
--- Show when there are 2+ unique mobs with aggro, OR when the single
--- mob isn't the current target (in which case the main bar shows 0% and
--- the sub-bar reveals the real per-mob value).
+-- Show sub-bars whenever a member has any attributed xtarget mobs.
+-- The old "skip when only mob is current target" rule made sense back when
+-- xtargets were always attributed to self (the main bar already showed
+-- that info). With holder attribution, even a single attributed mob is
+-- meaningful — it tells you "this person is holding mob X" and shows
+-- *your* aggro on it as the bar fill.
 local function shouldShowSubBars(m)
-    if not m.xtargets or #m.xtargets == 0 then return false end
-    if #m.xtargets >= 2 then return true end
-    return not m.xtargets[1].isCurrent
+    return m.xtargets and #m.xtargets > 0
 end
 
 -- Right-click context menu for a player/pet bar. Always at minimum
@@ -178,14 +332,22 @@ local function drawSubBars(m)
     -- crashed in MQ Lua's ImGui binding (signature mismatch) and corrupted
     -- the style stack — the entire window stopped rendering. Removed.
     -- Sub-bar visual hierarchy now comes from indent + ↳ prefix only.
+
+    -- Sort sub-bars by aggro % descending so highest-threat mobs surface
+    -- to the top under each member. Copy first — m.xtargets may be shared
+    -- with data.lua's roster and we don't want to mutate it.
+    local sorted = {}
+    for i, xt in ipairs(m.xtargets) do sorted[i] = xt end
+    table.sort(sorted, function(a, b) return (a.pctAggro or 0) > (b.pctAggro or 0) end)
+
     ImGui.Indent(24)
-    for _, xt in ipairs(m.xtargets) do
+    for _, xt in ipairs(sorted) do
         local pct  = xt.pctAggro or 0
         local fill = math.max(0, math.min(100, pct)) / 100.0
         local marker = xt.isCurrent and ' *' or ''
         -- ↳ prefix marks these as children of the bar above
         local label = string.format('↳ %s  %d%%%s', xt.mobName or '?', pct, marker)
-        local c = colorForPct(pct)
+        local c = colorForSubBar(m, pct)
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, c[1], c[2], c[3], c[4])
         ImGui.ProgressBar(fill, -1, 16, label)
         ImGui.PopStyleColor()
@@ -215,7 +377,10 @@ local function drawBars(roster)
             '(filters hide everyone)')
         return
     end
-    local list = sortedByAggro(visible)
+    -- Stable layout — players in fixed order (MT/MA/others), pets right
+    -- after their owner. Sub-bars (per-mob) are sorted by aggro inside
+    -- drawSubBars; only the top-level player order is fixed.
+    local list = stableOrder(visible)
     for _, m in ipairs(list) do
         local pct = m.pctAggro or 0
         -- Cap the bar fill at 100% visually, but show the real number in the
@@ -277,6 +442,10 @@ end
 function M.draw()
     if not _visible then return end
 
+    -- Get out of the way when an EQ obstructing window is open (inventory,
+    -- bank, trade, etc.). See _autoHide / OBSTRUCTING_WINDOWS comments.
+    if isObstructed() then return end
+
     -- Honor a pending /agm reset by forcing window back to a known
     -- position + size. Cleared after one frame.
     if _resetPosNext then
@@ -317,5 +486,37 @@ function M.hide()    _visible = false end
 function M.toggle()  _visible = not _visible end
 function M.visible() return _visible end
 function M.windowName() return _windowName end
+
+-- Auto-hide controls
+function M.autoHide()              return _autoHide end
+function M.setAutoHide(enabled)
+    local v = enabled and true or false
+    if _autoHide ~= v then
+        _autoHide = v
+        config.set('autoHide', v)
+    end
+end
+
+-- Apply a freshly-loaded config to ui state. Called by init.lua after
+-- config.init() and after /agm reload. Uses local helpers to avoid
+-- accidentally re-marking config dirty during sync.
+function M.applyConfig()
+    local f = config.get('filters') or {}
+    if f.showMT   ~= nil then _filters.showMT   = f.showMT   end
+    if f.showMA   ~= nil then _filters.showMA   = f.showMA   end
+    if f.showPets ~= nil then _filters.showPets = f.showPets end
+
+    local ah = config.get('autoHide')
+    if ah ~= nil then _autoHide = ah and true or false end
+
+    local nt = config.get('nearThreshold')
+    if type(nt) == 'number' then NEAR_THRESHOLD = nt end
+
+    local cs = config.get('colors') or {}
+    if cs.holder then COLOR.HOLDER = cs.holder end
+    if cs.normal then COLOR.NORMAL = cs.normal end
+    if cs.near   then COLOR.NEAR   = cs.near   end
+    if cs.over   then COLOR.OVER   = cs.over   end
+end
 
 return M

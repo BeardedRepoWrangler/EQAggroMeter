@@ -5,8 +5,10 @@
 -- the main loop. Throttles fetches by configurable interval; UI reads the
 -- cached roster every frame without touching TLOs.
 
-local mq    = require('mq')
-local roles = require('aggrometer.roles')
+local mq     = require('mq')
+local roles  = require('aggrometer.roles')
+local config = require('aggrometer.config')
+local share  = require('aggrometer.share')
 
 local M = {}
 
@@ -65,37 +67,91 @@ local function buildSelf()
     }
 end
 
--- Step 5: build self's xtarget aggro list for the per-mob sub-bar display.
--- Returns an array of {mobId, mobName, pctAggro, isCurrent} for unique
--- non-zero xtarget mobs.
+-- Step 5 v2: build a holder→[mobs] map from the player's XTarget list.
+-- Each XTarget mob is attributed to whoever currently holds aggro on it,
+-- so sub-bars appear under the actual tank rather than always under self.
 --
--- The probe showed XTarget can list the same mob in multiple slots (slot
--- 2 + slot 5 both id=293 with the same %), so we dedupe by mobId on first
--- encounter. Slots with pct=0 are skipped — those are usually stale slot
--- reservations rather than real aggro.
+-- Attribution sources (in priority order):
+--   1. If mob == current target → use Target.AggroHolder.ID (known good).
+--   2. If mob == Me.Pet.Target.ID → attribute to my pet (heuristic — pet
+--      attacks whatever it has aggro on).
+--   3. If my aggro on the mob is 0 AND there's an MT in the roster that
+--      isn't us → attribute to MT. Covers the post-FD case where the
+--      player has dropped aggro on everything but the pet is still
+--      fighting; without this, those mobs would disappear from the
+--      meter entirely.
+--   4. Otherwise → default to self.
 --
--- This data is only available for the current character. MQ does not
--- expose other players' XTarget windows.
-local function buildSelfXTargets(currentTargetId)
-    local xt = {}
+-- Limitation: for mobs being tanked by a group tank that isn't us and
+-- isn't our pet, attribution may fall through to self if my aggro > 0.
+-- MQ doesn't expose other characters' .Target so we can't do better
+-- without re-targeting.
+--
+-- Mobs we have 0% aggro on are kept in the result IF they're attributed
+-- to a non-self holder; otherwise dropped (no useful info to surface).
+-- Same dedupe-by-mobId as before because XTarget can list the same mob
+-- in multiple slots.
+local function buildXTargetsByHolder(target, members)
+    local byHolder = {}
+
+    local mySpawnId = tlo(function() return mq.TLO.Me.ID() end, 0)
+    local myPetId   = tlo(function() return mq.TLO.Me.Pet.ID() end, 0)
+    local myPetTargetId = 0
+    if myPetId > 0 then
+        myPetTargetId = tlo(function() return mq.TLO.Me.Pet.Target.ID() end, 0)
+    end
+
+    -- Find the MT spawn ID from the roster (could be a player or, for
+    -- necro/mage/etc. solo, the pet — see roles.tagSoloMT).
+    local mtSpawnId = 0
+    for _, m in ipairs(members or {}) do
+        if m.isMT and m.spawnId and m.spawnId > 0 then
+            mtSpawnId = m.spawnId
+            break
+        end
+    end
+
+    local currentTargetId       = (target and target.targetId)  or 0
+    local currentTargetHolderId = (target and target.holderId)  or 0
+
+    local function attribute(mobId, myPctOnMob)
+        if mobId == currentTargetId and currentTargetHolderId > 0 then
+            return currentTargetHolderId
+        end
+        if myPetId > 0 and mobId == myPetTargetId then
+            return myPetId
+        end
+        if myPctOnMob == 0 and mtSpawnId > 0 and mtSpawnId ~= mySpawnId then
+            return mtSpawnId
+        end
+        return mySpawnId
+    end
+
     local seen = {}
     local slots = tlo(function() return mq.TLO.Me.XTargetSlots() end, 0)
     for i = 1, slots do
         local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
         if mobId > 0 and not seen[mobId] then
             local pct = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
-            if pct > 0 then
-                seen[mobId] = true
-                table.insert(xt, {
+            seen[mobId] = true
+            local holderId = attribute(mobId, pct)
+            -- Drop pct=0 mobs that fall through to self attribution —
+            -- nothing useful to show ("you have 0% aggro and we don't
+            -- know who has it" isn't actionable).
+            if pct > 0 or holderId ~= mySpawnId then
+                local entry = {
                     mobId     = mobId,
                     mobName   = tlo(function() return mq.TLO.Me.XTarget(i).CleanName() end, '?'),
                     pctAggro  = pct,
                     isCurrent = (mobId == currentTargetId),
-                })
+                }
+                byHolder[holderId] = byHolder[holderId] or {}
+                table.insert(byHolder[holderId], entry)
             end
         end
     end
-    return xt
+
+    return byHolder
 end
 
 local function buildGroupMember(n)
@@ -139,10 +195,10 @@ local function buildRoster()
     local secondaryNm = hasTarget and tlo(function() return mq.TLO.Target.SecondaryAggroPlayer.CleanName() end, nil) or nil
     local secondaryPc = hasTarget and tlo(function() return mq.TLO.Target.SecondaryPctAggro() end, 0) or 0
 
-    -- Step 3: role tagging. Sets isMT / isMA on the player members.
-    if mode == 'group' or mode == 'raid' then
-        roles.tagMembers(members, roles.detectGroupRoles())
-    end
+    -- Step 3: role tagging from explicit Group.MainTank/MainAssist plus
+    -- group-only heuristic (single tank-class member becomes MT). The
+    -- solo case is handled separately later — see roles.tagSoloMT.
+    roles.tagMembers(members, roles.detectGroupRoles())
 
     -- Target metadata is needed by pet aggro derivation, so build it first.
     local target = {
@@ -158,15 +214,80 @@ local function buildRoster()
 
     -- Step 3: append pets owned by any roster member as additional roster
     -- entries with isPet=true. Done AFTER role tagging so pets don't get
-    -- accidentally tagged as MT/MA.
+    -- accidentally tagged as MT/MA via the group/class heuristic.
     local pets = roles.findPets(members, target)
     for _, p in ipairs(pets) do table.insert(members, p) end
 
-    -- Step 5: attach self's xtarget aggro list. Only self gets this — MQ
-    -- doesn't expose other players' XTarget data. members[1] is always
-    -- self because buildSelf() is the first insert.
+    -- Solo MT tagging happens AFTER pets are added, because for non-tank
+    -- pet-class players (necro/mage/beastlord/enchanter) the pet is the
+    -- implicit tank. See roles.tagSoloMT for the full rule set.
+    if mode == 'solo' then
+        roles.tagSoloMT(members)
+    end
+
+    -- Step 5 v2: distribute xtarget mobs to whichever roster member is
+    -- currently holding aggro on each. Falls back to self when we can't
+    -- detect the holder. Pass members so the attribution can find the
+    -- MT spawn ID (which may be the pet for necro-style solo).
+    local xByHolder = buildXTargetsByHolder(target, members)
+    for _, m in ipairs(members) do
+        if m.spawnId and xByHolder[m.spawnId] then
+            m.xtargets = xByHolder[m.spawnId]
+        end
+    end
+
+    -- Step 7 phase 2: merge remote XTarget data from share.lua. For each
+    -- non-self non-pet roster member, if we've received their published
+    -- XTarget snapshot via the channel, REPLACE their attributed sub-bar
+    -- list with the remote data — that's their actual perspective on what
+    -- they have aggro on, more accurate than our local heuristic.
+    --
+    -- Local heuristic attribution still applies when no remote data is
+    -- available (member isn't running the script, or hasn't broadcast yet).
+    local remoteData = share.remoteData() or {}
+    for _, m in ipairs(members) do
+        if not m.isPet and not m.isMe and m.name then
+            local rd = remoteData[m.name]
+            if rd and rd.mobs then
+                local newXt = {}
+                for mobId, mobData in pairs(rd.mobs) do
+                    table.insert(newXt, {
+                        mobId    = mobId,
+                        mobName  = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, '?'),
+                        pctAggro = mobData.pct,
+                        isCurrent = (mobId == target.targetId),
+                        isRemote  = true,
+                    })
+                end
+                table.sort(newXt, function(a, b)
+                    return (a.pctAggro or 0) > (b.pctAggro or 0)
+                end)
+                m.xtargets = newXt
+            end
+        end
+    end
+
+    -- Step 5 v3: replace self's main-bar pctAggro (which is just % on the
+    -- *current target*) with the maximum % across all xtarget mobs. The
+    -- main bar's job is to surface the most threatening situation, not
+    -- just whichever mob you happen to be looking at.
+    --
+    -- Also track which mob's holder corresponds to that max %, so the
+    -- color logic in ui.lua can color based on that mob's situation
+    -- rather than the current target's. Stored as `maxThreatHolderId`.
     if members[1] and members[1].isMe then
-        members[1].xtargets = buildSelfXTargets(targetId)
+        local maxPct = members[1].pctAggro or 0
+        local maxHolderId = target.holderId or 0
+        for holderId, mobs in pairs(xByHolder) do
+            for _, mob in ipairs(mobs) do
+                if (mob.pctAggro or 0) > maxPct then
+                    maxPct = mob.pctAggro
+                    maxHolderId = holderId
+                end
+            end
+        end
+        members[1].pctAggro = maxPct
+        members[1].maxThreatHolderId = maxHolderId
     end
 
     return {
@@ -212,6 +333,15 @@ end
 
 function M.intervalMs(mode)
     return _intervalMs[mode] or _intervalMs.solo
+end
+
+-- Apply config-loaded refresh intervals. Called by init.lua after
+-- config.init() and after /agm reload.
+function M.applyConfig()
+    local r = config.get('refreshMs') or {}
+    if type(r.group) == 'number' then _intervalMs.group = r.group end
+    if type(r.solo)  == 'number' then _intervalMs.solo  = r.solo  end
+    if type(r.raid)  == 'number' then _intervalMs.raid  = r.raid  end
 end
 
 return M
