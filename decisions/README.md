@@ -18,3 +18,6 @@ Architecture Decision Records (ADRs). Each ADR captures a decision worth remembe
 ## Index
 
 - [[0001-record-architecture-decisions]]
+- [[0002-tlo-surface]]
+- [[0003-group-chat-transport]]
+- [[0004-holder-attribution-trusts-local-100pct]]

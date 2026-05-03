@@ -75,6 +75,20 @@ The MQ docs literally say `???` for `Target.SecondaryPctAggro`. Probe runs on 20
 
 **Treatment in UI:** holder is 100% by definition; everyone else is `Me.PctAggro` (for self) or `SecondaryPctAggro` (for the runner-up). When `SecondaryAggroPlayer.ID == AggroHolder.ID`, suppress the secondary row and render "—" instead of a percentage.
 
+## Holder attribution priority
+
+For each xtarget mob, `data.lua:buildXTargetsByHolder` decides which roster member is currently the aggro holder. See [[../decisions/0004-holder-attribution-trusts-local-100pct|ADR 0004]] for the rationale.
+
+Priority order (first match wins):
+
+0. **Local 100% beats everything.** If `info.pcts[me] >= 100` for a mob, attribute to me. `Me.XTarget(slot).PctAggro == 100` is the ground-truth holder signal — `Target.AggroHolder` lags through swaps and must NOT win when this disagrees.
+1. **AggroHolder for current target.** When (0) doesn't fire, `mq.TLO.Target.AggroHolder.ID` is reliable for the current target only. There is no AggroHolder TLO for non-current xtarget mobs.
+2. **Heuristic.** Pick the character with the highest known pct across local + peer XTarget data. If max pct < 100 (mob unclaimed), fall back to MT (the "expected tank"). Final fallback to self.
+
+Pet inference runs *before* the priority chain: when no character is at 100 on a mob and any character with non-zero aggro has a pet in the roster, that pet gets promoted to 100% in the pcts table. This is the only way to detect a peer's pet holding a mob (the wire protocol carries player pct only) and is also the only signal we have for self's pet tanking in solo necro/mage when self isn't pegged at 100%.
+
+The previous "Priority 2: mob == Me.Pet.Target.ID → pet" rule was removed in ADR 0004 — pet's auto-attack target is not a holder signal.
+
 ## Open questions
 
 - ~~Does Ascendant's MQ fork expose `Spawn.PctAggro`?~~ **Answered no, 2026-05-03.** Probe returned `attempt to call field 'PctAggro' (a nil value)` for every test ID. Field literally does not exist on this build.

@@ -23,6 +23,7 @@ ADR log lives in `decisions/`. See [[decisions/README|the decisions README]] for
 - [[decisions/0001-record-architecture-decisions|ADR 0001 — Record architecture decisions]]
 - [[decisions/0002-tlo-surface|ADR 0002 — TLO surface and the raid-mode coverage constraint]]
 - [[decisions/0003-group-chat-transport|ADR 0003 — Inter-character XTarget sharing rides EQ group/raid chat]]
+- [[decisions/0004-holder-attribution-trusts-local-100pct|ADR 0004 — Holder attribution trusts local XTarget == 100 over Target.AggroHolder]]
 
 ## Design
 

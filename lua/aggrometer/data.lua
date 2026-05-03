@@ -87,8 +87,14 @@ end
 --   1. Aggregate per-mob aggro: { mobId -> { charName -> pct } } from
 --      local Me.XTarget plus every remote character's published xtargets.
 --   2. For each mob, determine holder via:
---      a. Target.AggroHolder for the current target (known good).
---      b. Me.Pet.Target.ID → my pet (when pet is actively swinging).
+--      a. Local 100% signal beats anything: if my own XTarget pct on
+--         this mob is >= 100, I am the holder by definition. This wins
+--         even over Target.AggroHolder, because AggroHolder lags
+--         through holder swaps (most visible in solo necro/mage when
+--         you out-DOT the pet — Me.PctAggro hits 100 several ticks
+--         before AggroHolder updates).
+--      b. Target.AggroHolder for the current target (when (a) doesn't
+--         fire — i.e., when I'm not at 100% on it).
 --      c. The character with the highest pct across all sources.
 --      d. If max pct < 100 (mob unclaimed), fall back to MT.
 --      e. Final fallback to self.
@@ -110,11 +116,6 @@ local function buildXTargetsByHolder(target, members, remoteData)
     local byHolder = {}
 
     local mySpawnId = tlo(function() return mq.TLO.Me.ID() end, 0)
-    local myPetId   = tlo(function() return mq.TLO.Me.Pet.ID() end, 0)
-    local myPetTargetId = 0
-    if myPetId > 0 then
-        myPetTargetId = tlo(function() return mq.TLO.Me.Pet.Target.ID() end, 0)
-    end
 
     -- Find the MT spawn ID from the roster (could be a player or, for
     -- necro/mage/etc. solo, the pet — see roles.tagSoloMT).
@@ -220,10 +221,9 @@ local function buildXTargetsByHolder(target, members, remoteData)
     -- Inference is skipped when someone is already at 100 (= they really
     -- are holding) so this doesn't override known-good attribution.
     --
-    -- For self's own pet, this duplicates what the priority-2 rule
-    -- (Me.Pet.Target.ID) already handles for the swing target — pet
-    -- inference covers the broader "pet has it but isn't currently
-    -- swinging at it" case (multi-mob fights).
+    -- For self's own pet (necro/mage solo case), this is the only signal
+    -- we have that the pet is tanking on a mob I'm not at 100% on —
+    -- there's no per-pet aggro TLO in vanilla MQ.
     for mobId, info in pairs(mobInfo) do
         local anyAt100 = false
         for _, pct in pairs(info.pcts) do
@@ -243,17 +243,34 @@ local function buildXTargetsByHolder(target, members, remoteData)
     end
 
     -- Attribute each mob and build byHolder.
+    --
+    -- Priority order (see ADR 0004):
+    --   0. info.pcts[me] >= 100 on this mob → I am the holder.
+    --      Local XTarget pct == 100 is the ground truth; Target.AggroHolder
+    --      lags through holder swaps and must NOT win when this signal
+    --      disagrees. (Was the bug behind solo-necro pet-shows-as-holder
+    --      while mobs were melee'ing me.)
+    --   1. Target.AggroHolder for the current target (when I'm not at
+    --      100% on it). Reliable for the current target only — there is
+    --      no AggroHolder data for non-current xtarget mobs.
+    --   2. Heuristic: character with highest known pct; if max pct < 100
+    --      fall back to MT (= "expected tank"); final fallback to self.
+    --
+    -- The previous "Priority 2: mob == Me.Pet.Target.ID → pet" rule was
+    -- removed — the pet's auto-attack target is not a holder signal,
+    -- and that rule was causing pet-attribution even when I held the
+    -- mob. See log/2026-05-03.md for the diagnosis.
     for mobId, info in pairs(mobInfo) do
         local holderId
 
-        -- Priority 1: known holder of current target (most reliable).
-        if mobId == currentTargetId and currentTargetHolderId > 0 then
+        if (info.pcts[myCharName] or 0) >= 100 then
+            -- Priority 0: I'm at 100% = I am the holder.
+            holderId = mySpawnId
+        elseif mobId == currentTargetId and currentTargetHolderId > 0 then
+            -- Priority 1: known holder of current target.
             holderId = currentTargetHolderId
-        -- Priority 2: pet's swing target → pet (high confidence).
-        elseif myPetId > 0 and mobId == myPetTargetId then
-            holderId = myPetId
         else
-            -- Priority 3: heuristic — character with highest pct is most-
+            -- Priority 2 (heuristic): character with highest pct is most-
             -- likely holder. Tie at 100 = whoever wins iteration order.
             local maxPct, maxChar = -1, nil
             for char, pct in pairs(info.pcts) do
