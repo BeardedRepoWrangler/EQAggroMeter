@@ -1,0 +1,288 @@
+[AggroProbe] probe started — interval 2s. /lua stop aggrometer/probe to end.
+[AggroProbe] logging to file: C:\Games\EQAscendant\E3Next\Logs/aggrometer-probe.log
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 72
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 63
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 55
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 55
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 44
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 44
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 44
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 37
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 37
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 37
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 32
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 32
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 122   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 32
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] an undead oblation   id=120 PctAggro=0
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] an undead oblation   id=120 PctAggro=0
+[AggroProbe] -- Spawn[id].PctAggro fork-extension test (solo: pet + target + holder) --
+[AggroProbe]   Spawn[290].PctAggro (my pet Libann) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension
+[AggroProbe]   Spawn[122].PctAggro (target a sepulcher skeleton) = <error: C:\Games\EQAscendant\E3Next\lua\aggrometer\probe.lua:115: attempt to call field 'PctAggro' (a nil value)>   <-- nil/0 = vanilla MQ; nonzero = fork extension

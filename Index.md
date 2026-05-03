@@ -18,9 +18,14 @@ Map of content for the EQAggroMeter vault. Start here.
 
 ADR log lives in `decisions/`. See [[decisions/README|the decisions README]] for rules.
 
+- [[decisions/0001-record-architecture-decisions|ADR 0001 — Record architecture decisions]]
+- [[decisions/0002-tlo-surface|ADR 0002 — TLO surface and the raid-mode coverage constraint]]
+
 ## Design
 
 Living design docs in `design/`. See [[design/README|the design README]].
+
+- [[design/architecture|Architecture overview]]
 
 ## Data sources
 

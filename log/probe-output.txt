@@ -1,0 +1,578 @@
+[AggroProbe] probe started — interval 2s. /lua stop aggrometer/probe to end.
+[AggroProbe] logging to file: C:\Games\EQAscendant\E3Next\Logs/aggrometer-probe.log
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 33
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 33
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=33
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=33
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 34
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 34
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=34
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 34
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 34
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=34
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 33
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 33
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=33
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=33
+[AggroProbe]   XTarget[6] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 35
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 35
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=35
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=35
+[AggroProbe]   XTarget[6] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 34
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 34
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[6] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 34
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 34
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[6] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 36
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 36
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=36
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=36
+[AggroProbe]   XTarget[6] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 34
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 34
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=34
+[AggroProbe]   XTarget[6] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 33
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 293   Target.CleanName = a sepulcher skeleton
+[AggroProbe] Target.PctAggro             = 33
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a sepulcher skeleton id=293 PctAggro=33
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a sepulcher skeleton id=293 PctAggro=33
+[AggroProbe]   XTarget[6] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 0
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 0
+[AggroProbe] Target.SecondaryPctAggro    = 0
+[AggroProbe] Target.SecondaryAggroPlayer = nil
+[AggroProbe] Target.AggroHolder          = nil
+[AggroProbe] Target.AggroHolder.ID       = nil
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 152
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=100
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 100
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 100
+[AggroProbe] Target.SecondaryPctAggro    = 276
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=100
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=100
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 27
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 27
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=27
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=27
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 23
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 23
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=23
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=23
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 80
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 80
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=80
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=80
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 57
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 57
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=57
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=57
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 55
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 55
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=55
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=55
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 55
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 55
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=55
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=63
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 58
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 58
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=58
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=58
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 52
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 52
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=52
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=52
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 47
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 47
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=47
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=47
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 51
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 51
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=51
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=51
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 46
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 46
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=46
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=46
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 42
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 42
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=42
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=42
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 47
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 47
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=47
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=47
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 44
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 44
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=44
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=44
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 46
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 46
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=46
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=46
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 45
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 45
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=45
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=45
+
+[AggroProbe] ======== tick ========  mode = solo  zone = charasis
+[AggroProbe] -- Self aggro readouts --
+[AggroProbe] Me.Name      = Etcshadow
+[AggroProbe] Me.PctAggro  = 41
+[AggroProbe] Me.ID (spawn) = 289
+[AggroProbe] Me.Pet.ID    = 290   Me.Pet.Name = Libann
+[AggroProbe] -- Target aggro readouts --
+[AggroProbe] Target.ID = 169   Target.CleanName = a pyre golem
+[AggroProbe] Target.PctAggro             = 41
+[AggroProbe] Target.SecondaryPctAggro    = 100
+[AggroProbe] Target.SecondaryAggroPlayer = Libann
+[AggroProbe] Target.AggroHolder          = Libann
+[AggroProbe] Target.AggroHolder.ID       = 290
+[AggroProbe] -- XTarget aggro (sanity check — known-good per-target aggro) --
+[AggroProbe] XTargetSlots = 13
+[AggroProbe]   XTarget[2] a pyre golem         id=169 PctAggro=41
+[AggroProbe]   XTarget[4] nil                  id=165 PctAggro=0
+[AggroProbe]   XTarget[5] a pyre golem         id=169 PctAggro=41
