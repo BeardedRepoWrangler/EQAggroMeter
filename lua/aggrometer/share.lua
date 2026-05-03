@@ -79,6 +79,11 @@ local _activeLeader     = nil      -- leader name keyed in config.channels
 local _lastPublishMs    = 0
 local _pendingInvite    = nil      -- { sender, channel, at }
 
+-- Event-driven publish state. Compared each tick against current state to
+-- decide whether to publish immediately (vs waiting for keepalive).
+local _xtargetSnapshot  = {}       -- { mobId = pct } from last publish
+local _lastPetTargetId  = 0        -- pet's swing target from last publish
+
 -- Remote XTarget data received from other characters on the channel.
 -- Schema: _remote[charName] = {
 --   mobs    = { [mobId] = { name=str, pct=int, lastSeen=ms } },
@@ -237,27 +242,67 @@ local function buildPetPublishPayload()
     return string.format('AGMP:%s:%d@100', petName, petTargetId)
 end
 
+-- Publish a snapshot of self + pet aggro. Sends two messages (player +
+-- pet) when both are non-empty. Caller (M.tick) is responsible for
+-- timing decisions; this function does the actual chat send.
 function M.publish()
     if not config.get('share.enabled') then return end
-    local nowM = nowMs()
-    local interval = config.get('share.publishMs') or 2000
-    if (nowM - _lastPublishMs) < interval then return end
 
-    -- Publish player aggro
     local payload = buildPublishPayloadFromMe()
     if payload then
         sendToChannel(nil, payload)
     end
 
-    -- Publish pet aggro (only if pet has a current swing target — high
-    -- confidence case). Receive-side inference in data.lua handles the
-    -- broader case where pet has aggro but isn't actively swinging.
     local petPayload = buildPetPublishPayload()
     if petPayload then
         sendToChannel(nil, petPayload)
     end
 
-    _lastPublishMs = nowM
+    _lastPublishMs = nowMs()
+end
+
+-- Sample current XTarget into a {mobId -> pct} table for change detection.
+-- Same filters as buildPublishPayloadFromMe (skip corpses + stale spawns).
+local function sampleXTargetSnapshot()
+    local snap = {}
+    local seen = {}
+    local slots = tlo(function() return mq.TLO.Me.XTargetSlots() end, 0)
+    for i = 1, slots do
+        local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
+        if mobId > 0 and not seen[mobId] then
+            seen[mobId] = true
+            local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
+            local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
+            if mobName and mobName ~= '' and mobType ~= 'Corpse' then
+                snap[mobId] = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
+            end
+        end
+    end
+    return snap
+end
+
+-- True when the snapshot's "interesting" state differs from prev:
+--   * mobs added/removed
+--   * holder transition (a pct crossed the 100% threshold either way)
+-- Fine-grained pct fluctuations don't trigger; those wait for keepalive.
+local function snapshotChanged(prev, curr)
+    for mobId in pairs(prev) do
+        if curr[mobId] == nil then return true end
+    end
+    for mobId, pct in pairs(curr) do
+        local oldPct = prev[mobId]
+        if oldPct == nil then return true end
+        local wasHolder = oldPct >= 100
+        local isHolder  = pct >= 100
+        if wasHolder ~= isHolder then return true end
+    end
+    return false
+end
+
+local function currentPetTargetId()
+    local petId = tlo(function() return mq.TLO.Me.Pet.ID() end, 0)
+    if petId <= 0 then return 0 end
+    return tlo(function() return mq.TLO.Me.Pet.Target.ID() end, 0)
 end
 
 -- ---------------------------------------------------------------------------
@@ -372,12 +417,41 @@ function M.tick()
     -- Pump pending events (chat lines) so onChatLine fires.
     pcall(function() mq.doevents() end)
     -- Drop stale remote data.
-    local staleCutoff = nowMs() - (config.get('share.remoteStaleMs') or 6000)
+    local staleCutoff = nowMs() - (config.get('share.remoteStaleMs') or 30000)
     for k, v in pairs(_remote) do
         if (v.updated or 0) < staleCutoff then _remote[k] = nil end
     end
-    -- Periodic publish.
-    M.publish()
+
+    if not config.get('share.enabled') then return end
+
+    -- Event-driven publish. Compare current state to last published.
+    -- Publish if:
+    --   (a) something interesting changed AND we haven't published in
+    --       changeMinIntervalMs (rate limit), OR
+    --   (b) keepaliveMs has elapsed since last publish (sanity refresh).
+    local now           = nowMs()
+    local sinceLast     = now - _lastPublishMs
+    local changeMin     = config.get('share.changeMinIntervalMs') or 1000
+    local keepalive     = config.get('share.keepaliveMs') or 15000
+
+    local currentSnap   = sampleXTargetSnapshot()
+    local currentPetTgt = currentPetTargetId()
+
+    local changed = snapshotChanged(_xtargetSnapshot, currentSnap) or
+                    (currentPetTgt ~= _lastPetTargetId)
+
+    local shouldPublish = false
+    if changed and sinceLast >= changeMin then
+        shouldPublish = true
+    elseif sinceLast >= keepalive then
+        shouldPublish = true
+    end
+
+    if shouldPublish then
+        M.publish()
+        _xtargetSnapshot = currentSnap
+        _lastPetTargetId = currentPetTgt
+    end
 end
 
 -- /agm share on

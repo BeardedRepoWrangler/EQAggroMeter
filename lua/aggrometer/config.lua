@@ -48,14 +48,21 @@ local DEFAULTS = {
         solo  = 100,
         raid  = 200,
     },
-    -- Inter-character sharing via EQ chat channels.
+    -- Inter-character sharing via EQ group/raid chat.
     share = {
-        enabled         = false,    -- master toggle, off until user runs /agm share on
-        trust           = false,    -- auto-join group invites without prompt
-        publishMs       = 2000,     -- XTarget broadcast cadence (don't lower under EQ chat throttle)
-        groupTTLDays    = 30,       -- forget group channel entries unused this long
-        raidTTLDays     = 1,        -- forget raid channel entries unused this long
-        remoteStaleMs   = 6000,     -- drop remote XTarget data not refreshed in this window
+        enabled              = false,  -- master toggle, off until /agm share on
+        trust                = false,  -- legacy (channel-transport era)
+        -- Event-driven publish:
+        --   * publish immediately when our held-mobs set or pet target
+        --     changes, but no more often than changeMinIntervalMs apart
+        --   * also send a keepalive at most every keepaliveMs in case
+        --     events were missed (e.g. chat throttled briefly)
+        changeMinIntervalMs  = 1000,
+        keepaliveMs          = 15000,
+        publishMs            = 2000,   -- legacy field, ignored
+        groupTTLDays         = 30,     -- legacy (channel-transport era)
+        raidTTLDays          = 1,      -- legacy
+        remoteStaleMs        = 30000,  -- bumped: with keepalive at 15s, allow 2 misses before dropping peer
     },
     -- Per-leader-name remembered channels. Populated/managed by share.lua.
     -- Schema per entry:
