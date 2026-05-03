@@ -156,8 +156,17 @@ local function commandHandler(...)
             share.status()
         elseif arg == 'debug' then
             share.debug()
+        elseif arg == 'tap' then
+            local on = (args[3] or ''):lower()
+            if on == 'on' or on == 'true' or on == '1' then
+                share.setTap(true)
+            elseif on == 'off' or on == 'false' or on == '0' then
+                share.setTap(false)
+            else
+                chat('usage: /agm share tap on|off')
+            end
         else
-            chatf('usage: /agm share on|off|status|debug   (got "%s")', arg)
+            chatf('usage: /agm share on|off|status|debug|tap   (got "%s")', arg)
         end
     elseif sub == 'announce' then
         share.announce()

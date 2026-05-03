@@ -268,35 +268,43 @@ local function handleAGMInvite(sender, channelName)
     end
 end
 
+-- Verbose chat-tap toggle for debugging. When true, every fired hook
+-- logs to chat so we can see whether our event patterns are matching.
+-- Toggle with /agm share tap on/off.
+local _chatTap = false
+
 -- Shared dispatch — works regardless of chat format the message arrived in.
-local function dispatchAGM(sender, msg)
+local function dispatchAGM(sender, msg, source)
+    if _chatTap then
+        chatf('TAP[%s]: sender=%s msg=%s', tostring(source),
+            tostring(sender), tostring(msg))
+    end
     if not msg or not sender then return end
+    if sender == _myCharName then return end  -- ignore own echo
     if msg:sub(1, 11) == 'AGM-INVITE:' then
         handleAGMInvite(sender, msg:sub(12))
+    elseif msg:sub(1, 16) == 'AGM-DEBUG-PING:' then
+        chatf('received debug ping from %s: %s', sender, msg)
     elseif msg:sub(1, 4) == 'AGM:' then
         handleAGMData(sender, msg:sub(5))
     end
 end
 
--- Channel chat (where the AGM: data flow lives once both peers /join'd).
--- Format: "<Sender> tells <channelName>:<slot>, '<message>'"
 local function onChannelChat(line, sender, channel, slot, msg)
-    dispatchAGM(sender, msg)
+    dispatchAGM(sender, msg, 'channel')
 end
 
--- Group / raid chat (where AGM-INVITE bootstrap lines arrive when one
--- peer runs /agm announce). Format:
---   "<Sender> tells the group, '<message>'"
---   "<Sender> tells the raid, '<message>'"
--- Both patterns hand off to the same dispatch.
 local function onGroupOrRaidChat(line, sender, msg)
-    dispatchAGM(sender, msg)
+    dispatchAGM(sender, msg, 'group/raid')
 end
 
--- /tell support — your buddy can also invite you with a direct tell:
---   "<Sender> tells you, '<message>'"
 local function onTellChat(line, sender, msg)
-    dispatchAGM(sender, msg)
+    dispatchAGM(sender, msg, 'tell')
+end
+
+function M.setTap(enabled)
+    _chatTap = enabled and true or false
+    chatf('chat tap: %s', _chatTap and 'on' or 'off')
 end
 
 -- ---------------------------------------------------------------------------
