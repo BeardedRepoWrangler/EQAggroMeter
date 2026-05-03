@@ -62,6 +62,15 @@ local DEFAULTS = {
     --   { suffix = "3F7Q9", kind = "group"|"raid", lastSeen = <unix-ts>,
     --     autoJoin = true|false }
     channels = {},
+    -- Auto-cleanup of stale XTarget slots. Slots where Spawn(mobId) no
+    -- longer resolves are reset via /xtarget remove <slot> after the
+    -- staleness has persisted past the threshold (avoids resetting on
+    -- transient lag). The slot's TYPE setting (auto-hater vs manual) is
+    -- preserved by /xtarget remove.
+    xtarget = {
+        autoResetStale     = true,
+        staleThresholdSec  = 3,
+    },
 }
 
 -- ---------------------------------------------------------------------------

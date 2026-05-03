@@ -196,10 +196,16 @@ local function buildPublishPayloadFromMe()
     for i = 1, slots do
         local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
         if mobId > 0 and not seen[mobId] then
-            local pct = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
-            if pct >= 0 then
-                seen[mobId] = true
-                table.insert(parts, string.format('%d@%d', mobId, pct))
+            seen[mobId] = true
+            -- Skip corpses + stale slots (Spawn no longer resolves) — same
+            -- filter as data.lua's local xtarget iteration.
+            local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
+            local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
+            if mobName and mobName ~= '' and mobType ~= 'Corpse' then
+                local pct = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
+                if pct >= 0 then
+                    table.insert(parts, string.format('%d@%d', mobId, pct))
+                end
             end
         end
     end

@@ -53,6 +53,13 @@ local _intervalMs = {
 
 local _lastFetchClock = 0
 
+-- Per-slot stale-tracking for the XTarget auto-reset feature. Schema:
+--   _slotState[slot] = { mobId = N, staleSince = os.clock() | nil }
+-- We require staleness to persist past staleThresholdSec before issuing
+-- the reset, so brief lag-induced "spawn not found" blips don't trigger
+-- resets when the spawn would have come back on its own.
+local _slotState = {}
+
 -- ---------------------------------------------------------------------------
 -- roster construction
 
@@ -72,20 +79,25 @@ end
 -- so sub-bars appear under the actual tank rather than always under self.
 --
 -- Attribution sources (in priority order):
---   1. If mob == current target → use Target.AggroHolder.ID (known good).
---   2. If mob == Me.Pet.Target.ID → attribute to my pet (heuristic — pet
---      attacks whatever it has aggro on).
---   3. If my aggro on the mob is 0 AND there's an MT in the roster that
---      isn't us → attribute to MT. Covers the post-FD case where the
---      player has dropped aggro on everything but the pet is still
---      fighting; without this, those mobs would disappear from the
---      meter entirely.
+--   1. mob == current target → use Target.AggroHolder.ID (known good).
+--   2. mob == Me.Pet.Target.ID → attribute to my pet (high confidence —
+--      the pet is actively swinging at it).
+--   3. My aggro % on the mob is < 100 AND there's an MT in the roster
+--      that isn't us → attribute to MT. Generalization of the older
+--      "pct == 0 → MT" rule. Rationale: if I'm not at parity with the
+--      holder, someone else has more aggro than me; the MT is the most
+--      likely candidate. In necro-solo this attributes to the pet (which
+--      tagSoloMT marked as MT). In group it attributes to the tank.
+--      Without this rule, multi-mob fights show only the pet's *current
+--      swing target* under the pet — every other mob on the pet's hate
+--      list incorrectly displays under the player.
 --   4. Otherwise → default to self.
 --
--- Limitation: for mobs being tanked by a group tank that isn't us and
--- isn't our pet, attribution may fall through to self if my aggro > 0.
--- MQ doesn't expose other characters' .Target so we can't do better
--- without re-targeting.
+-- Limitations:
+--   * In a group with multiple tanks (off-tank, etc.), rule 3 attributes
+--     to whichever single MT we tagged — could be wrong for off-tank mobs.
+--   * MQ doesn't expose other characters' .Target so we can't deterministi-
+--     cally know the holder without targeting the mob.
 --
 -- Mobs we have 0% aggro on are kept in the result IF they're attributed
 -- to a non-self holder; otherwise dropped (no useful info to surface).
@@ -121,32 +133,73 @@ local function buildXTargetsByHolder(target, members)
         if myPetId > 0 and mobId == myPetTargetId then
             return myPetId
         end
-        if myPctOnMob == 0 and mtSpawnId > 0 and mtSpawnId ~= mySpawnId then
+        -- If I'm not at 100% (= not tied with holder = not the holder),
+        -- the MT most likely has it. Attribute there.
+        if myPctOnMob < 100 and mtSpawnId > 0 and mtSpawnId ~= mySpawnId then
             return mtSpawnId
         end
         return mySpawnId
     end
 
+    local autoReset       = config.get('xtarget.autoResetStale')
+    local staleThreshold  = config.get('xtarget.staleThresholdSec') or 3
+    local nowClock        = os.clock()
+
     local seen = {}
     local slots = tlo(function() return mq.TLO.Me.XTargetSlots() end, 0)
     for i = 1, slots do
         local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
-        if mobId > 0 and not seen[mobId] then
-            local pct = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
+        if mobId == 0 then
+            _slotState[i] = nil  -- empty slot, drop tracking
+        elseif not seen[mobId] then
             seen[mobId] = true
-            local holderId = attribute(mobId, pct)
-            -- Drop pct=0 mobs that fall through to self attribution —
-            -- nothing useful to show ("you have 0% aggro and we don't
-            -- know who has it" isn't actionable).
-            if pct > 0 or holderId ~= mySpawnId then
-                local entry = {
-                    mobId     = mobId,
-                    mobName   = tlo(function() return mq.TLO.Me.XTarget(i).CleanName() end, '?'),
-                    pctAggro  = pct,
-                    isCurrent = (mobId == currentTargetId),
-                }
-                byHolder[holderId] = byHolder[holderId] or {}
-                table.insert(byHolder[holderId], entry)
+            -- Skip:
+            --   * Corpses (Spawn.Type='Corpse') — XTarget keeps recently
+            --     killed mobs until the slot cycles.
+            --   * Stale slots where Spawn(mobId) no longer resolves
+            --     (mob despawned, zoned out). Detect by CleanName=nil.
+            --   These both render as confusing junk entries otherwise
+            --   (corpses as "<name>'s corpse 0%", stale as "? 0%").
+            local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
+            local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
+            local isStale = (not mobName or mobName == '')
+
+            -- Stale-slot reset tracking. Per-slot state remembers when we
+            -- first saw this mob ID become unresolvable; if it stays stale
+            -- past the threshold we issue /xtarget remove <slot>.
+            local s = _slotState[i]
+            if not s or s.mobId ~= mobId then
+                _slotState[i] = { mobId = mobId, staleSince = isStale and nowClock or nil }
+            elseif isStale and not s.staleSince then
+                s.staleSince = nowClock
+            elseif not isStale then
+                s.staleSince = nil
+            end
+
+            if isStale and autoReset then
+                local stateNow = _slotState[i]
+                if stateNow.staleSince and (nowClock - stateNow.staleSince) >= staleThreshold then
+                    pcall(function() mq.cmdf('/xtarget remove %d', i) end)
+                    pcall(function()
+                        mq.cmd(string.format('/echo \at[\ayAggroMeter\at]\ax cleared stale XTarget slot %d (mob %d)', i, mobId))
+                    end)
+                    _slotState[i] = nil
+                end
+            end
+
+            if mobName and mobName ~= '' and mobType ~= 'Corpse' then
+                local pct = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
+                local holderId = attribute(mobId, pct)
+                -- Drop pct=0 mobs that fall through to self attribution.
+                if pct > 0 or holderId ~= mySpawnId then
+                    byHolder[holderId] = byHolder[holderId] or {}
+                    table.insert(byHolder[holderId], {
+                        mobId     = mobId,
+                        mobName   = mobName,
+                        pctAggro  = pct,
+                        isCurrent = (mobId == currentTargetId),
+                    })
+                end
             end
         end
     end
@@ -251,13 +304,20 @@ local function buildRoster()
             if rd and rd.mobs then
                 local newXt = {}
                 for mobId, mobData in pairs(rd.mobs) do
-                    table.insert(newXt, {
-                        mobId    = mobId,
-                        mobName  = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, '?'),
-                        pctAggro = mobData.pct,
-                        isCurrent = (mobId == target.targetId),
-                        isRemote  = true,
-                    })
+                    -- Drop corpses + stale-spawn entries on the receive
+                    -- side too. Same filter as the publisher should have
+                    -- applied, but defensive in case publisher is older.
+                    local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
+                    local mobType = tlo(function() return mq.TLO.Spawn(mobId).Type() end, '')
+                    if mobName and mobName ~= '' and mobType ~= 'Corpse' then
+                        table.insert(newXt, {
+                            mobId    = mobId,
+                            mobName  = mobName,
+                            pctAggro = mobData.pct,
+                            isCurrent = (mobId == target.targetId),
+                            isRemote  = true,
+                        })
+                    end
                 end
                 table.sort(newXt, function(a, b)
                     return (a.pctAggro or 0) > (b.pctAggro or 0)
@@ -333,6 +393,25 @@ end
 
 function M.intervalMs(mode)
     return _intervalMs[mode] or _intervalMs.solo
+end
+
+-- Immediate stale-slot reset, ignoring the 3s grace period. Called by the
+-- /agm xtreset slash command. Returns the count of slots reset.
+function M.resetStaleXTargetsNow()
+    local count = 0
+    local slots = tlo(function() return mq.TLO.Me.XTargetSlots() end, 0)
+    for i = 1, slots do
+        local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
+        if mobId > 0 then
+            local mobName = tlo(function() return mq.TLO.Spawn(mobId).CleanName() end, nil)
+            if not mobName or mobName == '' then
+                pcall(function() mq.cmdf('/xtarget remove %d', i) end)
+                _slotState[i] = nil
+                count = count + 1
+            end
+        end
+    end
+    return count
 end
 
 -- Apply config-loaded refresh intervals. Called by init.lua after

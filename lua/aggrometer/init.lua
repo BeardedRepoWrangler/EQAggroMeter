@@ -46,6 +46,7 @@ local function printHelp()
     chat('  windows  - list which probe-known EQ windows are currently open')
     chat('  reload   - re-load config from disk (filters, colors, thresholds, refresh)')
     chat('  cfgpath  - print the path to the config file for this character')
+    chat('  xtreset  - immediately clear any stale XTarget slots (no 3s wait)')
     chat('  mode     - print the currently detected mode (solo/group/raid)')
     chat('  help     - this help text')
     chat('share commands (cross-character XTarget visibility via EQ chat):')
@@ -182,6 +183,9 @@ local function commandHandler(...)
         else
             chat('usage: /agm channel list   OR   /agm channel forget <leader>|all')
         end
+    elseif sub == 'xtreset' then
+        local n = data.resetStaleXTargetsNow()
+        chatf('immediate stale-XTarget reset: %d slot(s) cleared', n)
     elseif sub == 'help' or sub == '?' then
         printHelp()
     else
