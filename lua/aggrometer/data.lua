@@ -65,6 +65,39 @@ local function buildSelf()
     }
 end
 
+-- Step 5: build self's xtarget aggro list for the per-mob sub-bar display.
+-- Returns an array of {mobId, mobName, pctAggro, isCurrent} for unique
+-- non-zero xtarget mobs.
+--
+-- The probe showed XTarget can list the same mob in multiple slots (slot
+-- 2 + slot 5 both id=293 with the same %), so we dedupe by mobId on first
+-- encounter. Slots with pct=0 are skipped — those are usually stale slot
+-- reservations rather than real aggro.
+--
+-- This data is only available for the current character. MQ does not
+-- expose other players' XTarget windows.
+local function buildSelfXTargets(currentTargetId)
+    local xt = {}
+    local seen = {}
+    local slots = tlo(function() return mq.TLO.Me.XTargetSlots() end, 0)
+    for i = 1, slots do
+        local mobId = tlo(function() return mq.TLO.Me.XTarget(i).ID() end, 0)
+        if mobId > 0 and not seen[mobId] then
+            local pct = tlo(function() return mq.TLO.Me.XTarget(i).PctAggro() end, 0)
+            if pct > 0 then
+                seen[mobId] = true
+                table.insert(xt, {
+                    mobId     = mobId,
+                    mobName   = tlo(function() return mq.TLO.Me.XTarget(i).CleanName() end, '?'),
+                    pctAggro  = pct,
+                    isCurrent = (mobId == currentTargetId),
+                })
+            end
+        end
+    end
+    return xt
+end
+
 local function buildGroupMember(n)
     -- Skip offline / out-of-zone members. Group.Member.Present() is true
     -- if the member is in the current zone.
@@ -128,6 +161,13 @@ local function buildRoster()
     -- accidentally tagged as MT/MA.
     local pets = roles.findPets(members, target)
     for _, p in ipairs(pets) do table.insert(members, p) end
+
+    -- Step 5: attach self's xtarget aggro list. Only self gets this — MQ
+    -- doesn't expose other players' XTarget data. members[1] is always
+    -- self because buildSelf() is the first insert.
+    if members[1] and members[1].isMe then
+        members[1].xtargets = buildSelfXTargets(targetId)
+    end
 
     return {
         members           = members,

@@ -39,8 +39,12 @@ local function printHelp()
     chat('  show     - reveal the meter window')
     chat('  hide     - hide the meter window')
     chat('  toggle   - toggle visibility')
+    chat('  reset    - force window back to a visible position + default size')
     chat('  mode     - print the currently detected mode (solo/group/raid)')
     chat('  help     - this help text')
+    chat('bar UX: left-click to /target, right-click for context menu (Target/Assist).')
+    chat('sub-bars (under your own bar) show per-mob aggro from your XTarget list.')
+    chat('  ↳ prefix = child bar.   * suffix = your current target.')
     chat('aliases: /agm  /aggro    (note: /aggrometer is shadowed by an EQ window — do not use)')
     chat('stop with: /lua stop aggrometer')
 end
@@ -55,6 +59,10 @@ local function commandHandler(...)
         ui.hide(); chat('window hidden')
     elseif sub == 'toggle' then
         ui.toggle(); chatf('visible = %s', tostring(ui.visible()))
+    elseif sub == 'reset' then
+        ui.show()
+        ui.resetPosition()
+        chat('window position reset to (100, 100), size 380x220')
     elseif sub == 'mode' then
         local r = data.roster()
         chatf('mode = %s   members = %d   target = %s',
@@ -70,6 +78,11 @@ end
 -- bootstrap
 
 ui.setRosterProvider(data.roster)
+
+-- Defensive cleanup in case a previous /lua run left a stale callback
+-- registered under the same name. Wrapped in pcall because mq.imgui.destroy
+-- errors if the name isn't registered (which is the case on first run).
+pcall(function() mq.imgui.destroy('AggroMeter') end)
 
 mq.imgui.init('AggroMeter', ui.draw)
 
