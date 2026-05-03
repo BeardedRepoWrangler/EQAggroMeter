@@ -5,7 +5,8 @@
 -- the main loop. Throttles fetches by configurable interval; UI reads the
 -- cached roster every frame without touching TLOs.
 
-local mq = require('mq')
+local mq    = require('mq')
+local roles = require('aggrometer.roles')
 
 local M = {}
 
@@ -105,19 +106,41 @@ local function buildRoster()
     local secondaryNm = hasTarget and tlo(function() return mq.TLO.Target.SecondaryAggroPlayer.CleanName() end, nil) or nil
     local secondaryPc = hasTarget and tlo(function() return mq.TLO.Target.SecondaryPctAggro() end, 0) or 0
 
+    -- Step 3: role tagging. Sets isMT / isMA on the player members.
+    if mode == 'group' or mode == 'raid' then
+        roles.tagMembers(members, roles.detectGroupRoles())
+    end
+
+    -- Target metadata is needed by pet aggro derivation, so build it first.
+    local target = {
+        targetId          = targetId,
+        targetName        = hasTarget and tlo(function() return mq.TLO.Target.CleanName() end, nil) or nil,
+        holderId          = holderId,
+        holderName        = holderName,
+        secondaryId       = secondaryId,
+        secondaryName     = secondaryNm,
+        secondaryPctAggro = secondaryPc,
+        secondaryIsHolder = (secondaryId > 0 and secondaryId == holderId),
+    }
+
+    -- Step 3: append pets owned by any roster member as additional roster
+    -- entries with isPet=true. Done AFTER role tagging so pets don't get
+    -- accidentally tagged as MT/MA.
+    local pets = roles.findPets(members, target)
+    for _, p in ipairs(pets) do table.insert(members, p) end
+
     return {
-        members            = members,
-        mode               = mode,
-        targetId           = targetId,
-        targetName         = hasTarget and tlo(function() return mq.TLO.Target.CleanName() end, nil) or nil,
-        holderId           = holderId,
-        holderName         = holderName,
-        secondaryName      = secondaryNm,
-        secondaryPctAggro  = secondaryPc,
-        -- Flag the MQ quirk where SecondaryAggroPlayer == AggroHolder; UI
-        -- should suppress the secondary % display in that case.
-        secondaryIsHolder  = (secondaryId > 0 and secondaryId == holderId),
-        lastUpdated        = os.clock(),
+        members           = members,
+        mode              = mode,
+        targetId          = target.targetId,
+        targetName        = target.targetName,
+        holderId          = target.holderId,
+        holderName        = target.holderName,
+        secondaryId       = target.secondaryId,
+        secondaryName     = target.secondaryName,
+        secondaryPctAggro = target.secondaryPctAggro,
+        secondaryIsHolder = target.secondaryIsHolder,
+        lastUpdated       = os.clock(),
     }
 end
 

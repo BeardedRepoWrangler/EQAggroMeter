@@ -1,11 +1,10 @@
 -- aggrometer/ui.lua
 --
 -- ImGui draw callback. Reads cached roster from data.lua, sorts, colors,
--- draws bars. Never calls TLOs directly. Step 2 scope: flat list, no
--- filters, no clicks. Filters land in step 3, raid grouping in step 4,
+-- draws bars. Never calls TLOs directly. Step 3 scope adds: filter
+-- toggles, role-tag display, pet attribution. Raid grouping in step 4,
 -- click handlers in step 5.
 
-local mq = require('mq')
 local ImGui = require('ImGui')
 
 local M = {}
@@ -22,7 +21,7 @@ local COLOR = {
     HEADER   = {0.85, 0.85, 0.85, 1.0},
 }
 
-local YELLOW_THRESHOLD = 80   -- becomes config in step 7
+local NEAR_THRESHOLD = 80   -- becomes config in step 7
 
 -- ---------------------------------------------------------------------------
 -- internal state
@@ -31,6 +30,14 @@ local _visible    = true
 local _rosterFn   = function() return nil end
 local _windowName = 'AggroMeter'
 
+-- Filter toggles. All default OFF per spec. Persistence to config lands in
+-- step 7; for now they reset on each /lua run.
+local _filters = {
+    showMT   = false,
+    showMA   = false,
+    showPets = false,
+}
+
 -- ---------------------------------------------------------------------------
 -- helpers
 
@@ -38,7 +45,7 @@ local function colorFor(member, holderId)
     if holderId > 0 and member.spawnId == holderId then return COLOR.HOLDER end
     local pct = member.pctAggro or 0
     if pct > 100 then return COLOR.OVER end
-    if pct >= YELLOW_THRESHOLD then return COLOR.NEAR end
+    if pct >= NEAR_THRESHOLD then return COLOR.NEAR end
     return COLOR.NORMAL
 end
 
@@ -47,6 +54,37 @@ local function sortedByAggro(members)
     for i, m in ipairs(members) do copy[i] = m end
     table.sort(copy, function(a, b) return (a.pctAggro or 0) > (b.pctAggro or 0) end)
     return copy
+end
+
+-- Apply the three filter toggles. Self is always shown regardless of MT/MA
+-- flags — toggling "Show MT" off shouldn't hide a tank player's own bar.
+local function applyFilters(members)
+    local out = {}
+    for _, m in ipairs(members) do
+        local hide = false
+        if not _filters.showMT and m.isMT and not m.isMe then hide = true end
+        if not _filters.showMA and m.isMA and not m.isMe then hide = true end
+        if not _filters.showPets and m.isPet then hide = true end
+        if not hide then table.insert(out, m) end
+    end
+    return out
+end
+
+-- Build the bar overlay text. Pets get the "Name (Owner's pet)" form
+-- per spec; everyone else gets the "CLS Name PCT%" form.
+local function memberLabel(m)
+    local pct = m.pctAggro or 0
+    if m.isPet and m.ownerName then
+        return string.format('%-3s %s (%s\'s pet)  %d%%',
+            m.class or 'PET', m.name or '?', m.ownerName, pct)
+    end
+    -- Inline a single-char tag for tagged roles so the user can distinguish
+    -- when MT/MA filters are enabled. Empty string when untagged.
+    local tag = ''
+    if m.isMT then tag = ' [T]' end
+    if m.isMA then tag = tag .. ' [A]' end
+    return string.format('%-3s %-16s%s  %3d%%',
+        m.class or '???', m.name or '?', tag, pct)
 end
 
 local function drawHeader(roster)
@@ -69,15 +107,30 @@ local function drawHeader(roster)
     end
 end
 
+local function drawFilters()
+    -- ImGui.Checkbox returns (newValue, changed); we only need newValue.
+    -- Taking just the first return discards the rest cleanly.
+    _filters.showMT   = ImGui.Checkbox('Show MT',   _filters.showMT)
+    ImGui.SameLine()
+    _filters.showMA   = ImGui.Checkbox('Show MA',   _filters.showMA)
+    ImGui.SameLine()
+    _filters.showPets = ImGui.Checkbox('Show Pets', _filters.showPets)
+end
+
 local function drawBars(roster)
-    local list = sortedByAggro(roster.members)
+    local visible = applyFilters(roster.members)
+    if #visible == 0 then
+        ImGui.TextColored(COLOR.DIM[1], COLOR.DIM[2], COLOR.DIM[3], COLOR.DIM[4],
+            '(filters hide everyone)')
+        return
+    end
+    local list = sortedByAggro(visible)
     for _, m in ipairs(list) do
         local pct = m.pctAggro or 0
         -- Cap the bar fill at 100% visually, but show the real number in the
         -- overlay so over-aggro is still readable.
         local fill = math.max(0, math.min(100, pct)) / 100.0
-        local label = string.format('%-3s %-16s %3d%%',
-            m.class or '???', m.name or '?', pct)
+        local label = memberLabel(m)
         local c = colorFor(m, roster.holderId)
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, c[1], c[2], c[3], c[4])
         ImGui.ProgressBar(fill, -1, 18, label)
@@ -111,6 +164,8 @@ function M.draw()
                 'Empty roster')
         else
             drawHeader(roster)
+            ImGui.Separator()
+            drawFilters()
             ImGui.Separator()
             drawBars(roster)
             drawFooter(roster)
