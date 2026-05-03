@@ -102,7 +102,7 @@ The previous "Priority 2: mob == Me.Pet.Target.ID → pet" rule was removed in A
 
 The `<attacker>` prefix is reduced to a mob name by stripping the trailing verb word (or possessive limb form, e.g. `a sepulcher skeleton's claw hits` → `a sepulcher skeleton`). Resolution against the current XTarget list uses a per-fetch cached `name → mobIds` index, so each event fires O(1) on the hot path.
 
-Same-display-name multi-mob disambiguation uses `Spawn(mobId).Target.ID() == Me.ID()` as a tiebreaker. Falls back to over-attributing all matching mobs as recently-attacking — a safer error mode than the original "pet shown as holder while user gets hit" bug.
+Same-display-name multi-mob disambiguation was *designed* around a `Spawn(mobId).Target.ID() == Me.ID()` tiebreaker, but the 2026-05-03 probe established that `Spawn.Target` doesn't exist on Ascendant's MQ build (errors on access). The tiebreaker therefore degrades on this server to "over-attribute all matching same-named mobs as recently-attacking" — handled gracefully by the `pcall` wrapper, no error surfaces. Over-attribution to self is still strictly better than the original under-attribution bug. If a future Ascendant MQ build adds `Spawn.Target`, the tiebreaker code path activates without changes.
 
 ## Open questions
 
@@ -122,6 +122,7 @@ Same-display-name multi-mob disambiguation uses `Spawn(mobId).Target.ID() == Me.
 | `Target.SecondaryPctAggro` | yes (docs say `???`) | ✅ — semantics now empirically known (above) |
 | `Me.XTarget[n].PctAggro` | yes | ✅ — note: eventually consistent across slots |
 | `Spawn[id].PctAggro` | NO | ❌ field does not exist (error on call) |
+| `Spawn[id].Target` | yes | ❌ field does not exist on Ascendant (error: "attempt to index field 'Target' (a nil value)"). Probed 2026-05-03 mid-combat against an active xtarget mob. ADR 0005's multi-mob tiebreaker degrades to over-attribution as a result. |
 | `Group.Member[n].PctAggro` | yes | ⏳ unverified, high confidence |
 | `Raid.MainAssist[N]` indexed | NO | ⏳ unverified |
 

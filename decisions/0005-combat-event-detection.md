@@ -33,7 +33,7 @@ Add a new module `lua/aggrometer/combat.lua` that:
    - `<attacker> YOU for <n> point(s) of damage.` (hit)
    - `<attacker> tries to <verb> YOU<rest>` (miss / defensive result)
 2. Resolves the attacker name against the current XTarget list (cached `name → mobIds` index, refreshed once per `data.fetch` tick rather than once per fired event — combat events fire dozens of times per second in heavy fights).
-3. When multiple xtargets share the same display name, narrows via `Spawn(mobId).Target.ID() == Me.ID()` as a tiebreaker. Falls back to over-attributing all matching xtargets if `Spawn.Target` isn't decisive.
+3. When multiple xtargets share the same display name, *attempts* to narrow via `Spawn(mobId).Target.ID() == Me.ID()` as a tiebreaker. **Important:** the 2026-05-03 mid-combat probe on Ascendant established that `Spawn.Target` does not exist on this build (`attempt to index field 'Target' (a nil value)`). The `pcall` wrapper catches the error, narrowing returns no results, and the code falls back to over-attributing all matching xtargets — graceful degradation, no surfaced error. The tiebreaker code stays in place for forks that do expose `Spawn.Target` and as forward-compat for future Ascendant updates.
 4. Stores `_attackedMe[mobId] = os.clock()` for each resolved attacker. Entries expire after `combat.attackerTtlSec` seconds (default 5s, configurable).
 5. Exposes `combat.recentAttackerOf(mobId)` for the attribution chain.
 

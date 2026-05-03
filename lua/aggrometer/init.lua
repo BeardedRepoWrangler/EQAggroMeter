@@ -55,8 +55,8 @@ local function printHelp()
     chat('  share debug                - diagnostic dump for share troubleshooting')
     chat('  share tap on|off           - verbose chat-event log (debug)')
     chat('combat commands (real-time hit detection — see ADR 0005):')
-    chat('  combat status              - show recent attackers + TTL')
-    chat('  combat tap on|off          - log every detected hit/miss event (debug)')
+    chat('  combat status              - show recent attackers + tap log path')
+    chat('  combat tap on|off          - append every hit/miss event to a log file')
     chat('  combat ttl <seconds>       - set how long an attacker stays "recent"')
     chat('bar UX: left-click to /target, right-click for context menu (Target/Assist).')
     chat('sub-bars (under your own bar) show per-mob aggro from your XTarget list.')
@@ -202,20 +202,42 @@ local function commandHandler(...)
             for _ in pairs(snap) do count = count + 1 end
             chatf('combat detection: ttl=%.1fs  tap=%s  recent attackers=%d',
                 combat.ttl(), tostring(combat.tap()), count)
+            if combat.tap() and combat.logPath() then
+                -- Backslashes in paths break /echo (interpreted as MQ escape
+                -- codes). Forward-slashes display cleanly and Windows file
+                -- APIs accept either.
+                local p = (combat.logPath() or ''):gsub('\\', '/')
+                chatf('  tap log: %s  (%d events written)', p, combat.logCount())
+            end
             for mobId, age in pairs(snap) do
                 local name = mq.TLO.Spawn(mobId).CleanName() or '?'
                 chatf('  mob %d (%s): %.1fs ago', mobId, tostring(name), age)
             end
         elseif arg == 'tap' then
             local on = (args[3] or ''):lower()
+            local target
             if on == 'on' or on == 'true' or on == '1' then
-                combat.setTap(true)
+                target = true
             elseif on == 'off' or on == 'false' or on == '0' then
-                combat.setTap(false)
+                target = false
             else
-                combat.setTap(not combat.tap())
+                target = not combat.tap()
             end
-            chatf('combat tap = %s', tostring(combat.tap()))
+            local ok, info = combat.setTap(target)
+            -- IMPORTANT: scrub backslashes from anything we /echo. EQ chat
+            -- eats \G \E \L \c etc. as color-code escapes; a path like
+            -- C:\Games\EQAscendant\E3Next\Logs\foo.log displays as
+            -- "C:?ames?QAscendant?3Next?ogs?foo.log" — same backslash
+            -- issue init.lua already documents in the cfgpath handler.
+            local infoStr = tostring(info or ''):gsub('\\', '/')
+            if not ok then
+                chatf('combat tap toggle failed: %s', infoStr)
+            elseif target then
+                chatf('combat tap = on. writing to %s', infoStr)
+                chat('  (tail this file in PowerShell:  Get-Content -Wait <path>)')
+            else
+                chatf('combat tap = off. %s', infoStr)
+            end
         elseif arg == 'ttl' then
             local n = tonumber(args[3] or '')
             if n and n > 0 then
