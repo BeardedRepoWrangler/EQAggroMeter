@@ -326,23 +326,16 @@ local function drawMainBarPopup(m)
     end
 end
 
--- Color rules for the new mob-slot view.
---
--- Colors reflect the situation per mob, not per player:
---   Holder is non-MT non-pet (random DPS pulled aggro)  → red (alert)
---   Holder is MT or pet, threat (non-holder pct) >= 80  → magenta (warning)
---   Holder is MT or pet, threat < 80                    → green (safe)
---   No identifiable holder                              → red (unknown)
-local function colorForMob(holderMember, mob)
+-- Color rules for the mob view. Two states only — green when the right
+-- person has the mob, red when someone else does. The threat-percentage
+-- "approaching pull" warning was removed in favor of a simpler glance:
+-- the tank doesn't need a number, they need to know whether to peel.
+local function colorForMob(holderMember)
     if not holderMember then return COLOR.OVER end
-    -- MT and pets are both acceptable holders. Non-MT player holding =
-    -- mob is in the wrong place.
-    if not holderMember.isMT and not holderMember.isPet then
-        return COLOR.OVER
+    if holderMember.isMT or holderMember.isPet then
+        return COLOR.HOLDER  -- green: correct holder (MT or pet)
     end
-    local pct = mob.pctAggro or 0
-    if pct >= 80 then return COLOR.NEAR end
-    return COLOR.HOLDER
+    return COLOR.OVER        -- red: wrong person holding, peel needed
 end
 
 -- Extract x from CalcTextSize result regardless of binding return form.
@@ -376,61 +369,42 @@ local function drawMobs(roster)
 
     for _, mob in ipairs(roster.mobs) do
         local holder = memberById[mob.holderId]
-        local color = colorForMob(holder, mob)
-        local pct = mob.pctAggro or 0
-        local fill = math.max(0, math.min(100, pct)) / 100.0
+        local color = colorForMob(holder)
 
+        -- Two text segments: mob name (left), holder name (right).
+        -- Current target gets a * suffix on the mob name.
         local mobName   = mob.mobName or '?'
+        if mob.isCurrent then mobName = mobName .. ' *' end
         local holderStr = mob.holderName or '?'
-        local threatStr
-        if mob.threatChar and pct > 0 then
-            threatStr = string.format('%s %d%%', mob.threatChar, pct)
-        elseif pct > 0 then
-            threatStr = string.format('%d%%', pct)
-        else
-            threatStr = ''
-        end
-        if mob.isCurrent then
-            threatStr = (threatStr == '' and '*' or (threatStr .. ' *'))
-        end
 
-        -- Capture row geometry before drawing the bar so we can overlay
-        -- text at the same Y position afterward.
+        -- Capture row geometry for text overlay
         local rowStartX = ImGui.GetCursorPosX()
         local rowStartY = ImGui.GetCursorPosY()
         local barWidth  = availWidth()
 
-        -- Draw the bar with empty overlay (we'll position our own text).
+        -- Solid-color bar (fill=1.0) — color carries the entire signal.
         ImGui.PushStyleColor(ImGuiCol.PlotHistogram, color[1], color[2], color[3], color[4])
-        ImGui.ProgressBar(fill, -1, 18, '')
+        ImGui.ProgressBar(1.0, -1, 18, '')
         ImGui.PopStyleColor()
 
-        -- Capture click events on the bar (IsItemClicked targets last item).
+        -- Capture clicks before overlaying text.
         local afterBarY    = ImGui.GetCursorPosY()
         local leftClicked  = ImGui.IsItemClicked(0)
         local rightClicked = ImGui.IsItemClicked(1)
 
-        -- Overlay three text segments by rewinding the cursor to the bar's
-        -- Y position. Pure SetCursorPos*/Text — no draw-list API needed.
-        local hw = textWidth(holderStr)
-        local tw = textWidth(threatStr)
+        -- Overlay two text segments by rewinding cursor to bar's Y.
+        local hw     = textWidth(holderStr)
         local textY  = rowStartY + 2
         local leftX  = rowStartX + 6
-        local centX  = rowStartX + (barWidth / 2) - (hw / 2)
-        local rightX = rowStartX + barWidth - tw - 6
+        local rightX = rowStartX + barWidth - hw - 6
 
         ImGui.SetCursorPosY(textY); ImGui.SetCursorPosX(leftX)
         ImGui.Text(mobName)
 
-        ImGui.SetCursorPosY(textY); ImGui.SetCursorPosX(centX)
+        ImGui.SetCursorPosY(textY); ImGui.SetCursorPosX(rightX)
         ImGui.Text(holderStr)
 
-        if threatStr ~= '' then
-            ImGui.SetCursorPosY(textY); ImGui.SetCursorPosX(rightX)
-            ImGui.Text(threatStr)
-        end
-
-        -- Restore cursor below the bar so the next row stacks below.
+        -- Restore cursor below the bar for the next row.
         ImGui.SetCursorPosY(afterBarY)
         ImGui.SetCursorPosX(rowStartX)
 
