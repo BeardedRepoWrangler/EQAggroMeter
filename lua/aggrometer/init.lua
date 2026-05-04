@@ -15,12 +15,13 @@
 -- toggle, mode, help. (reload, pin, unpin + filters/clicks land in
 -- later build-order steps.)
 
-local mq     = require('mq')
-local data   = require('aggrometer.data')
-local ui     = require('aggrometer.ui')
-local config = require('aggrometer.config')
-local share  = require('aggrometer.share')
-local combat = require('aggrometer.combat')
+local mq      = require('mq')
+local data    = require('aggrometer.data')
+local ui      = require('aggrometer.ui')
+local config  = require('aggrometer.config')
+local share   = require('aggrometer.share')
+local combat  = require('aggrometer.combat')
+local version = require('aggrometer.version')
 
 local TAG = '\at[\ayAggroMeter\at]\ax'
 
@@ -49,6 +50,7 @@ local function printHelp()
     chat('  cfgpath  - print the path to the config file for this character')
     chat('  xtreset  - immediately clear any stale XTarget slots (no 3s wait)')
     chat('  mode     - print the currently detected mode (solo/group/raid)')
+    chat('  version  - print the running AggroMeter version')
     chat('  help     - this help text')
     chat('share commands (cross-character XTarget visibility via group/raid chat):')
     chat('  share on|off|status        - toggle XTarget broadcasting to group/raid chat')
@@ -263,6 +265,8 @@ local function commandHandler(...)
         else
             chatf('usage: /agm combat status|tap on|off|ttl <s>   (got "%s")', arg)
         end
+    elseif sub == 'version' or sub == 'ver' then
+        chatf('AggroMeter %s', version.display())
     elseif sub == 'help' or sub == '?' then
         printHelp()
     else
@@ -305,7 +309,8 @@ safeUnbind('/aggro')
 mq.bind('/agm',   commandHandler)
 mq.bind('/aggro', commandHandler)
 
-chat('loaded. /agm help for commands. /lua stop aggrometer to quit.')
+chatf('loaded %s. /agm help for commands. /lua stop aggrometer to quit.',
+    version.display())
 
 -- ---------------------------------------------------------------------------
 -- main loop

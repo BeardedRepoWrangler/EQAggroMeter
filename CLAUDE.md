@@ -1,7 +1,7 @@
 ---
 tags: [meta, claude]
 status: active
-updated: 2026-05-03
+updated: 2026-05-04
 ---
 
 # CLAUDE.md
@@ -34,7 +34,10 @@ EQAggroMeter is an aggro meter for EverQuest — a real-time threat tracker that
    - If it changes what's in the repo or how it's installed → update [[README]] and any affected runbooks
    - If it makes existing code dead → delete the dead code in the same change, don't leave commented-out remnants
    - If it adds a new module or top-level note → link from [[Index]]
+   - **Propose a version bump** (MAJOR / MINOR / PATCH / none) with a one-line rationale and a draft `[Unreleased]` entry for [[CHANGELOG]]. Classification rules are in [[decisions/0008-semantic-versioning|ADR 0008]]. "None" is allowed for purely internal changes but must be stated explicitly so the choice is visible — don't silently skip it.
    The bar is "future-Claude or a new contributor shows up cold and can understand the current state by reading the docs." Never punt hygiene to "later."
+
+10. **Versioning.** `lua/aggrometer/version.lua` is the single source of truth. Never put a version literal anywhere else in the repo — UI, slash commands, banners all import from `aggrometer.version`. When cutting a release, follow [[runbooks/cut-a-release]]. Semver bump policy: see [[decisions/0008-semantic-versioning|ADR 0008]].
 
 ## Deploy environment
 
@@ -60,6 +63,7 @@ Michael runs Windows + PowerShell. Format every command block accordingly:
 - [[Vision]] — what we're building and why
 - [[Roadmap]] — Now / Next / Later
 - [[Glossary]] — shared vocabulary
+- [[CHANGELOG]] — Keep-a-Changelog log of releases, paired with `lua/aggrometer/version.lua`
 - `decisions/` — ADRs, numbered, immutable once accepted
 - `design/` — living design docs
 - `data-sources/` — notes on external data we depend on

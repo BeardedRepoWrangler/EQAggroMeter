@@ -1,7 +1,7 @@
 ---
 tags: [moc, index]
 status: active
-updated: 2026-05-03
+updated: 2026-05-04
 ---
 
 # Index
@@ -15,6 +15,7 @@ Map of content for the EQAggroMeter vault. Start here.
 - [[Vision]] — what we're building and why
 - [[Roadmap]] — Now / Next / Later
 - [[Glossary]] — shared vocabulary
+- [[CHANGELOG]] — releases (semver), paired with `lua/aggrometer/version.lua`
 
 ## Decisions
 
@@ -27,6 +28,7 @@ ADR log lives in `decisions/`. See [[decisions/README|the decisions README]] for
 - [[decisions/0005-combat-event-detection|ADR 0005 — Combat events drive holder attribution at the highest priority]]
 - [[decisions/0006-combat-event-broadcast|ADR 0006 — AGMH wire protocol broadcasts combat-event holder signals to peers]]
 - [[decisions/0007-pet-preference-in-heuristic|ADR 0007 — Heuristic prefers non-tank-class pets at 100% over peer players at 100%]]
+- [[decisions/0008-semantic-versioning|ADR 0008 — Semantic versioning, single source of truth, manual bumps]]
 
 ## Design
 
@@ -44,6 +46,7 @@ External data we depend on — see `data-sources/` and its [[data-sources/README
 How-to guides in `runbooks/`. See [[runbooks/README|the runbooks README]].
 
 - [[runbooks/install-for-buddy|Install / update AggroMeter for someone else]]
+- [[runbooks/cut-a-release|Cut a release]] — bump `version.lua`, update `CHANGELOG`, tag, push
 - [[runbooks/run-probe|Run the aggro TLO probe]] (diagnostic)
 
 ## Log

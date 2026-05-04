@@ -2,6 +2,8 @@
 
 A real-time aggro meter for EverQuest (EQEmu servers, primary target Ascendant EQ), implemented as a MacroQuest Lua plugin. Modeled after WoW's Omen Threat Meter — solves a UI problem EQ has had for 25 years.
 
+**Current release: v1.0.0** (May 2026). See [`CHANGELOG.md`](CHANGELOG.md) for what's in it and [ADR 0008](decisions/0008-semantic-versioning.md) for how versioning works.
+
 The core insight: in classic EQ a tank can't easily tell when a DPS has pulled aggro on a non-current-target mob. This meter surfaces that with a glance — green bars are mobs the tank/pet correctly holds, red bars are mobs that need peeling. Click any row to target the mob.
 
 ![meter screenshot placeholder — capture in-game and add to repo if you want]()
@@ -89,6 +91,7 @@ For typical solo play, no further configuration needed. For group/raid sharing:
 /agm share on | off | status   manage cross-character share
 /agm share debug               diagnostic dump for share troubleshooting
 /agm share tap on | off        verbose chat-event log for share troubleshooting
+/agm version                   print the running AggroMeter version
 /agm help                      this help
 ```
 
@@ -98,13 +101,15 @@ Aliases: `/agm` and `/aggro` both work. `/aggrometer` is shadowed by an EQ-side 
 
 ```
 lua/aggrometer/
-├── init.lua    entry point, slash-command dispatch, ImGui callback wiring, main loop
-├── data.lua    TLO reads, mode detection, roster + mob attribution, slot tracking
-├── ui.lua      ImGui draw, mob-slot rendering, click handling
-├── roles.lua   MT/MA detection (explicit + class heuristic + solo pet rule)
-├── share.lua   cross-character share via group/raid chat (publish + receive)
-├── config.lua  per-server-per-character config persistence
-└── probe.lua   standalone diagnostic for raw TLO inspection (not loaded by init)
+├── init.lua     entry point, slash-command dispatch, ImGui callback wiring, main loop
+├── data.lua     TLO reads, mode detection, roster + mob attribution, slot tracking
+├── ui.lua       ImGui draw, mob-slot rendering, click handling
+├── roles.lua    MT/MA detection (explicit + class heuristic + solo pet rule)
+├── share.lua    cross-character share via group/raid chat (publish + receive)
+├── combat.lua   real-time hit detection + AGMH peer broadcast
+├── config.lua   per-server-per-character config persistence
+├── version.lua  single source of truth for the AggroMeter version (semver)
+└── probe.lua    standalone diagnostic for raw TLO inspection (not loaded by init)
 ```
 
 Each module has a single responsibility; `init.lua` is the only file that touches `mq.imgui.init` and slash commands.
@@ -157,22 +162,24 @@ Persisted: filter toggles, autohide on/off, near threshold, RGBA bar colors, ref
 - ADRs in `decisions/` capture non-trivial architectural choices. Numbered, immutable once accepted; supersede with a new ADR rather than edit.
 - Living design docs in `design/`.
 - Dated work log in `log/YYYY-MM-DD.md` for session summaries.
-- Hygiene rule: design docs, ADRs, runbooks, and this README are updated alongside code changes — never punted to "later." See [`CLAUDE.md`](CLAUDE.md) for the full list of operating rules used by Claude Code when contributing.
+- [Semantic versioning](https://semver.org/) — version lives in [`lua/aggrometer/version.lua`](lua/aggrometer/version.lua) as the single source of truth. Releases recorded in [`CHANGELOG.md`](CHANGELOG.md). Bump policy and release ritual: [ADR 0008](decisions/0008-semantic-versioning.md) and [`runbooks/cut-a-release.md`](runbooks/cut-a-release.md).
+- Hygiene rule: design docs, ADRs, runbooks, version, and this README are updated alongside code changes — never punted to "later." See [`CLAUDE.md`](CLAUDE.md) for the full list of operating rules used by Claude Code when contributing.
 
 ## Repo layout
 
 ```
 EQAggroMeter/
 ├── README.md                        you are here
+├── CHANGELOG.md                     release log (Keep a Changelog format)
 ├── CLAUDE.md                        operating rules for Claude Code contributions
 ├── Index.md                         vault map of content
 ├── Vision.md                        what we're building and why
 ├── Roadmap.md                       Now / Next / Later
 ├── Glossary.md                      shared vocabulary
-├── lua/aggrometer/                  the actual MQ Lua code
+├── lua/aggrometer/                  the actual MQ Lua code (version.lua = source of truth)
 ├── decisions/                       ADRs (numbered)
 ├── design/                          living design docs
-├── runbooks/                        how-to guides + install/update scripts
+├── runbooks/                        how-to guides + install/update scripts + release ritual
 ├── log/                             dated work-session log
 ├── data-sources/                    notes on external data we depend on
 └── templates/                       note templates

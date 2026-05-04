@@ -6,9 +6,10 @@
 -- bar (self only — MQ doesn't expose other players' XTarget data).
 -- Raid grouping in step 4, config persistence in step 7.
 
-local mq     = require('mq')      -- needed for /target and /assist via mq.cmdf
-local ImGui  = require('ImGui')
-local config = require('aggrometer.config')
+local mq      = require('mq')      -- needed for /target and /assist via mq.cmdf
+local ImGui   = require('ImGui')
+local config  = require('aggrometer.config')
+local version = require('aggrometer.version')
 
 local M = {}
 
@@ -518,8 +519,15 @@ end
 
 local function drawFooter(roster)
     ImGui.Separator()
+    -- Footer line: mode + member count + version, inline in dim color.
+    -- The version is always rendered (independent of roster state) so a
+    -- screenshot of the meter — including blank/idle states — always
+    -- reveals which build the user is running. Style mirrors EQXPInfo:
+    -- lowercase v, three-part semver, dim color matching the rest of
+    -- the footer, sitting after the status text on the same row.
     ImGui.TextColored(COLOR.DIM[1], COLOR.DIM[2], COLOR.DIM[3], COLOR.DIM[4],
-        string.format('mode: %s   members: %d', roster.mode, #roster.members))
+        string.format('mode: %s   members: %d   %s',
+            roster.mode, #roster.members, version.display()))
 end
 
 -- ---------------------------------------------------------------------------
